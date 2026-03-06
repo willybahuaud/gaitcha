@@ -15,7 +15,7 @@ mosparo analyse le contenu des champs mais est inutile sur un formulaire minimal
 
 ## L'idée
 
-Construire un captcha **invisible, sans dépendance externe, self-hosted**, qui combine :
+Construire un captcha **transparent, sans dépendance externe, self-hosted**, qui combine :
 
 1. **Preuve de travail comportementale** — l'utilisateur a-t-il vraiment interagi avec la page ?
 2. **Champ piège à name aléatoire** — impossible à deviner sans charger la page
@@ -168,7 +168,7 @@ Pour les utilisateurs sans JS : fallback possible avec une question arithmétiqu
 - **Zéro dépendance externe**
 - **Self-hosted**
 - **Stateless** côté serveur
-- **Invisible** pour l'utilisateur
+- **Transparent** — une simple checkbox, l'analyse est silencieuse
 - **RGPD friendly** — aucune donnée envoyée à un tiers
 - **Accessible** — aucune interaction supplémentaire demandée
 - **Léger** — quelques Ko de JS, un endpoint PHP

@@ -1,6 +1,6 @@
 # Gaitcha
 
-Captcha invisible, self-hosted, sans dépendance externe. Combine analyse comportementale, champ à nom aléatoire et token HMAC signé pour bloquer les bots sans friction pour les humains.
+Captcha self-hosted, sans dépendance externe. Une simple checkbox analyse le comportement de l'utilisateur — trajectoire, timing, offset du clic — pour distinguer un humain d'un bot. Zéro friction, zéro tracking.
 
 ## Pourquoi
 
