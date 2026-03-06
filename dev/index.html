@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gaitcha — Dev Test</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            max-width: 600px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            color: #1a1a1a;
+        }
+        h1 { margin-bottom: 0.5rem; font-size: 1.5rem; }
+        p.subtitle { color: #666; margin-bottom: 2rem; }
+        form {
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        label { display: block; margin-bottom: 0.25rem; font-weight: 500; }
+        input[type="text"],
+        input[type="email"],
+        textarea {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            font-size: 1rem;
+        }
+        textarea { resize: vertical; min-height: 80px; }
+        button[type="submit"] {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 4px;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+        button[type="submit"]:hover { background: #1d4ed8; }
+
+        /* Gaitcha field */
+        .gaitcha-field {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin: 1rem 0;
+            padding: 0.75rem;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .gaitcha-checkbox { width: 1.25rem; height: 1.25rem; cursor: pointer; }
+        .gaitcha-label { font-weight: 400; cursor: pointer; user-select: none; }
+
+        /* Result */
+        #result {
+            padding: 1rem;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.875rem;
+            white-space: pre-wrap;
+            display: none;
+        }
+        #result.accepted { background: #d1fae5; border: 1px solid #6ee7b7; }
+        #result.rejected { background: #fee2e2; border: 1px solid #fca5a5; }
+
+        h2 { margin-top: 2rem; margin-bottom: 1rem; font-size: 1.2rem; }
+    </style>
+</head>
+<body>
+
+<h1>Gaitcha — Test</h1>
+<p class="subtitle">Formulaire de test pour le captcha comportemental.</p>
+
+<form id="form1" data-gaitcha data-gaitcha-endpoint="/captcha/init" action="/submit" method="POST">
+    <label for="name">Nom</label>
+    <input type="text" id="name" name="name" placeholder="Jean Dupont" required>
+
+    <label for="email">Email</label>
+    <input type="email" id="email" name="email" placeholder="jean@example.com" required>
+
+    <label for="message">Message</label>
+    <textarea id="message" name="message" placeholder="Votre message…"></textarea>
+
+    <!-- Gaitcha s'injecte ici dynamiquement -->
+
+    <button type="submit">Envoyer</button>
+</form>
+
+<div id="result"></div>
+
+<h2>Formulaire 2 (multi-form test)</h2>
+<form id="form2" data-gaitcha data-gaitcha-endpoint="/captcha/init" data-gaitcha-label="Vérification humaine" action="/submit" method="POST">
+    <label for="search">Recherche</label>
+    <input type="text" id="search" name="search" placeholder="Rechercher…">
+    <button type="submit">Chercher</button>
+</form>
+
+<div id="result2"></div>
+
+<script src="/gaitcha.min.js"></script>
+<script>
+    document.querySelectorAll('form').forEach(function setupForm(form) {
+        var resultId = form.id === 'form2' ? 'result2' : 'result';
+
+        form.addEventListener('submit', function handleSubmit(e) {
+            e.preventDefault();
+            var formData = new FormData(form);
+
+            fetch(form.action, { method: 'POST', body: formData })
+                .then(function toJson(r) { return r.json(); })
+                .then(function showResult(data) {
+                    var el = document.getElementById(resultId);
+                    el.style.display = 'block';
+                    el.className = data.status;
+                    el.textContent = JSON.stringify(data, null, 2);
+                })
+                .catch(function showError(err) {
+                    var el = document.getElementById(resultId);
+                    el.style.display = 'block';
+                    el.className = 'rejected';
+                    el.textContent = 'Erreur : ' + err.message;
+                });
+        });
+    });
+</script>
+</body>
+</html>
