@@ -1,0 +1,14 @@
+{
+    "name": "gaitcha",
+    "version": "0.1.0",
+    "private": true,
+    "description": "Invisible, self-hosted CAPTCHA combining behavioral analysis, random field names, and HMAC tokens.",
+    "scripts": {
+        "build": "node esbuild.config.mjs",
+        "dev": "node esbuild.config.mjs --watch",
+        "serve": "php -S localhost:8080 -t dev dev/server.php"
+    },
+    "devDependencies": {
+        "esbuild": "^0.24.0"
+    }
+}
