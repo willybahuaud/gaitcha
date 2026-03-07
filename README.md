@@ -1,6 +1,6 @@
 # Gaitcha
 
-Captcha self-hosted, sans dépendance externe. Une simple checkbox analyse le comportement de l'utilisateur — trajectoire, timing, offset du clic — pour distinguer un humain d'un bot. Zéro friction, zéro tracking.
+Captcha self-hosted, sans dépendance externe. Une simple checkbox analyse le comportement de l'utilisateur — trajectoire souris, timing clavier, signaux physiologiques — pour distinguer un humain d'un bot. Zéro friction, zéro tracking.
 
 ## Pourquoi
 
@@ -13,9 +13,9 @@ Les captchas classiques (reCAPTCHA, hCaptcha) collectent des données utilisateu
 3. Une checkbox visible est injectée dynamiquement dans le formulaire
 4. Le JS collecte les événements d'interaction (mouvements souris, tabs clavier, timing)
 5. Au submit, le log comportemental est envoyé avec le token
-6. Le serveur vérifie le token (signature + TTL) et **score le comportement** : trajectoire non-linéaire, offset du clic, variation de vitesse, timing des tabs…
+6. Le serveur vérifie le token (signature + TTL) et **score le comportement** sur 10 signaux souris ou 9 signaux clavier : trajectoire, vitesse, autocorrelation, dwell time, rollover, détection CDP…
 
-Un bot clique au pixel parfait, instantanément, sans trajectoire. Un humain hésite, dévie, clique un peu à côté du centre.
+Un bot clique au pixel parfait, instantanément, sans inertie. Un humain hésite, dévie, décélère, clique un peu à côté du centre.
 
 ## Installation
 
@@ -148,13 +148,13 @@ npm run serve
 
 ## Scoring
 
-Trois profils détectés automatiquement :
+Trois profils détectés automatiquement par le type de check (clic souris, touche clavier, touch). Si des données d'un autre profil existent (ex: mouvements souris + check clavier), les deux profils sont scorés et le meilleur est retenu.
 
-**Souris** — trajectoire existe (0.30), non-linéarité (0.25), offset du clic (0.25), variation de vitesse (0.20)
+**Souris (10 signaux)** — trajectoire, non-linéarité, offset du clic, variation de vitesse, angular jitter, direction reversals, endpoint deceleration, speed autocorrelation, CDP screen delta, coalesced events ratio
 
-**Clavier** — séquence de tabs (0.35), variance timing (0.30), cohérence navigation (0.20), délai focus→check (0.15)
+**Clavier (9 signaux)** — séquence de tabs, variance timing, cohérence navigation, délai focus→check, dwell time variance, rollover rate, timing entropy, correction bonus, timing autocorrelation
 
-**Touch** — similaire au profil souris, seuils adaptés au tactile
+**Touch (7 signaux)** — similaire au profil souris, seuils adaptés au tactile
 
 Kill signals (score = 0 immédiat) : `dt` < 100ms, aucun mouvement avant clic, clic exactement au centre, aucun tab avant check clavier.
 

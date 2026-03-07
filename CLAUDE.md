@@ -41,10 +41,10 @@ vendor/bin/phpunit --filter testHumanMouseInteractionScoresHigh
 - **TokenGenerator** — field name aléatoire préfixé `_gc_` + token HMAC `fieldName.timestamp.signature`
 - **TokenValidator** — vérifie signature (`hash_equals`) + TTL
 - **BehavioralLogParser** — parse et valide le log JSON client
-- **BehavioralScorer** — 3 profils (mouse, keyboard, touch) avec poids fixes et kill signals, score 0.0–1.0
+- **BehavioralScorer** — 3 profils (mouse 10 signaux, keyboard 9 signaux, touch 7 signaux) avec multi-profil, kill signals et score 0.0–1.0
 - **ValidationOrchestrator** — pipeline complet : token → anti-replay → parse log → scoring → résultat
 - **ValidationResult** — value object immutable (status, reason, score, debug)
-- **TokenStoreInterface / FileTokenStore** — anti-replay opt-in
+- **TokenStoreInterface / FileTokenStore** — anti-replay opt-in avec `checkAndAdd()` atomique
 - **AbstractEndpoint** — classe abstraite pour l'endpoint Ajax init
 
 ### JS Core — `src/js/` (bundle → `dist/gaitcha.min.js`)
@@ -52,7 +52,7 @@ vendor/bin/phpunit --filter testHumanMouseInteractionScoresHigh
 - **gaitcha.js** — entry point, auto-init `form[data-gaitcha]`, expose `Gaitcha.init()`
 - **GaitchaForm** — orchestre tout pour un formulaire (une instance par form)
 - **InteractionDetector** — premier signal (mousemove, touchstart, focus, keydown)
-- **EventLogger** — buffer circulaire 30 moves, throttle 50ms, freeze au check
+- **EventLogger** — buffer circulaire 30 moves, throttle 50ms, dwell time keydown/keyup, coalesced events count, screenDx/screenDy, freeze au check
 - **AjaxFetcher** — fetch token + auto-refresh à 75% du TTL
 - **DOMInjector** — injecte checkbox visible + label + hidden fields (_ct, _log)
 - **LogSerializer** — sérialise le payload au submit
@@ -68,9 +68,14 @@ PHPUnit 9. Couvre Config, TokenGenerator, TokenValidator, BehavioralLogParser, B
 
 ## Scoring comportemental
 
-**Profil mouse** : trajectoire (0.30), non-linéarité (0.25), offset clic (0.25), variation vitesse (0.20)
-**Profil keyboard** : séquence tabs (0.35), variance timing (0.30), cohérence navigation (0.20), délai focus→check (0.15)
-**Profil touch** : similaire mouse, seuils adaptés
+Scoring multi-profil : le profil primaire est determiné par le type de check event,
+mais un profil secondaire est scoré si des données existent. Score final = max des deux.
+
+**Profil mouse (10 signaux)** : trajectory (0.05), non_linearity (0.05), offset (0.10), speed_variation (0.05), angular_jitter (0.05), direction_reversals (0.15), endpoint_deceleration (0.15), speed_autocorrelation (0.15), cdp_screen_delta (0.10), coalesced_ratio (0.05)
+
+**Profil keyboard (9 signaux)** : tab_sequence (0.05), timing_variance (0.05), coherence (0.05), focus_to_check (0.10), dwell_variance (0.20), rollover_rate (0.20), timing_entropy (0.10), correction_bonus (0.10), timing_autocorrelation (0.15)
+
+**Profil touch (7 signaux)** : similaire mouse sans les signaux anti-CDP, seuils adaptés
 
 **Kill signals** (score = 0) : dt < 100ms, 0 moves avant clic, offset (0,0) exact, aucun tab avant check clavier.
 
