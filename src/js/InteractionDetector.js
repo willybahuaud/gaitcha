@@ -20,8 +20,12 @@ function listenForFirstInteraction(form, onFirstInteraction) {
     /**
      * Handler déclenché au premier event d'interaction.
      */
-    function handleFirstEvent() {
+    function handleFirstEvent(event) {
         if (triggered) {
+            return;
+        }
+        // Ignorer les events synthétiques (dispatchEvent).
+        if (event && event.isTrusted === false) {
             return;
         }
         triggered = true;

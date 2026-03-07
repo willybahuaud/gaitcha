@@ -16,6 +16,9 @@ class ValidationOrchestrator
     private BehavioralLogParser $logParser;
     private BehavioralScorer $scorer;
 
+    /**
+     * @param Config $config Configuration Gaitcha.
+     */
     public function __construct(Config $config)
     {
         $this->config         = $config;
@@ -37,7 +40,7 @@ class ValidationOrchestrator
         $debug          = [];
 
         // 1. Vérifier la présence du token.
-        if (empty($post[$tokenFieldName])) {
+        if (!isset($post[$tokenFieldName]) || !is_string($post[$tokenFieldName]) || $post[$tokenFieldName] === '') {
             // Pas de token = pas de JS ou soumission directe.
             if ($this->config->getNoJsFallback() === 'allow') {
                 return ValidationResult::accepted(0.0, ['fallback' => 'no_js_allowed']);
@@ -62,21 +65,21 @@ class ValidationOrchestrator
         if ($this->config->isAntiReplay()) {
             $store     = $this->config->getTokenStore();
             $tokenHash = hash('sha256', $post[$tokenFieldName]);
+            $now       = $currentTime ?? time();
 
             $store->purge($this->config->getTtl(), $currentTime);
 
-            if ($store->has($tokenHash)) {
+            // Opération atomique check-and-set — garanti par le contrat de l'interface.
+            if ($store->checkAndAdd($tokenHash, $now)) {
                 return $this->reject(ValidationResult::REASON_TOKEN_ALREADY_USED, 0.0, $debug);
             }
-
-            $store->add($tokenHash, $currentTime ?? time());
         }
 
         // 4. Lire et parser le log comportemental.
         $logFieldName = $fieldName . '_log';
         $logRaw       = $post[$logFieldName] ?? '';
 
-        if (empty($logRaw)) {
+        if (!is_string($logRaw) || $logRaw === '') {
             return $this->reject(ValidationResult::REASON_LOG_MALFORMED, 0.0, $debug);
         }
 

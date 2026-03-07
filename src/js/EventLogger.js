@@ -2,26 +2,32 @@
  * Collecte les événements d'interaction avec la checkbox Gaitcha.
  *
  * - Buffer circulaire de 30 mousemove max (throttle 50ms)
- * - Enregistre les focus changes (tabs)
- * - Enregistre le check event (clic ou clavier)
+ * - Compteur total de moves (pré-throttle) pour le serveur
+ * - Coalesced events count par mousemove (détection CDP)
+ * - Enregistre les focus changes (tabs) et keydown/keyup (dwell time)
+ * - Enregistre le check event (clic, clavier ou touch) avec screenDx/screenDy
  * - Se gèle automatiquement quand la checkbox est cochée
  */
 
 const MAX_MOVES = 30;
+const MAX_TABS = 50;
 const THROTTLE_MS = 50;
 
 /**
  * Crée un logger d'événements pour un formulaire.
  *
  * @param {HTMLFormElement} form Formulaire surveillé.
- * @return {object} Logger avec start(), freeze(), getPayload().
+ * @return {object} Logger avec start(), freeze(), recordCheck(), getPayload(), destroy().
  */
 function createEventLogger(form) {
     /** @type {Array<{t: number, x: number, y: number}>} */
     let moves = [];
 
-    /** @type {Array<{t: number, key: string}>} */
+    /** @type {Array<{t: number, key: string, dur: number}>} */
     let tabs = [];
+
+    /** @type {Map<string, number>} Touche active → index dans tabs[] (pour calculer dur au keyup). */
+    let activeKeys = new Map();
 
     /** @type {object|null} */
     let checkEvent = null;
@@ -31,6 +37,15 @@ function createEventLogger(form) {
 
     /** @type {number} Dernier timestamp de mousemove enregistré. */
     let lastMoveTime = 0;
+
+    /** @type {number} Nombre total de mousemove reçus (avant throttle). */
+    let totalMoveCount = 0;
+
+    /** @type {number} Somme des coalesced events sur les mousemove. */
+    let coalescedTotal = 0;
+
+    /** @type {number} Nombre de mousemove ayant eu des coalesced events. */
+    let coalescedMoveCount = 0;
 
     /** @type {boolean} */
     let frozen = false;
@@ -44,8 +59,20 @@ function createEventLogger(form) {
      * @param {MouseEvent} event Événement mousemove.
      */
     function handleMouseMove(event) {
-        if (frozen) {
+        if (frozen || event.isTrusted === false) {
             return;
+        }
+
+        // Compteur total AVANT le throttle check — permet au serveur de
+        // distinguer le nombre réel de moves vs les 30 du buffer circulaire.
+        totalMoveCount++;
+
+        // Coalesced events : un vrai navigateur regroupe plusieurs positions
+        // hardware entre chaque frame (moyenne > 1). CDP dispatche un event
+        // par appel mouse.move → toujours 1.0.
+        if (typeof event.getCoalescedEvents === 'function') {
+            coalescedTotal += event.getCoalescedEvents().length;
+            coalescedMoveCount++;
         }
 
         const now = performance.now();
@@ -78,7 +105,7 @@ function createEventLogger(form) {
      * @param {TouchEvent} event Événement touchmove.
      */
     function handleTouchMove(event) {
-        if (frozen || !event.touches.length) {
+        if (frozen || event.isTrusted === false || !event.touches.length) {
             return;
         }
 
@@ -112,7 +139,7 @@ function createEventLogger(form) {
      * @param {FocusEvent} event Événement focusin.
      */
     function handleFocusIn(event) {
-        if (frozen) {
+        if (frozen || event.isTrusted === false) {
             return;
         }
 
@@ -122,37 +149,67 @@ function createEventLogger(form) {
             firstEventTime = now;
         }
 
-        tabs.push({
-            t: Math.round(now - firstEventTime),
-            key: 'focus',
-        });
+        if (tabs.length < MAX_TABS) {
+            tabs.push({
+                t: Math.round(now - firstEventTime),
+                key: 'focus',
+            });
+        }
     }
 
     /**
-     * Enregistre un keydown pertinent (Tab, Space, Enter).
+     * Enregistre un keydown pertinent (Tab, Shift+Tab, Space, Enter).
+     *
+     * Ignore les auto-repeat (event.repeat) et stocke l'index dans activeKeys
+     * pour calculer la durée d'appui au keyup.
      *
      * @param {KeyboardEvent} event Événement keydown.
      */
     function handleKeyDown(event) {
-        if (frozen) {
+        if (frozen || event.isTrusted === false || event.repeat) {
             return;
         }
 
-        const validKeys = ['Tab', ' ', 'Enter'];
-        if (!validKeys.includes(event.key)) {
+        var key = event.shiftKey && event.key === 'Tab' ? 'Shift+Tab' : event.key;
+        if (key !== 'Tab' && key !== 'Shift+Tab' && key !== ' ' && key !== 'Enter') {
             return;
         }
 
-        const now = performance.now();
+        var now = performance.now();
 
         if (firstEventTime === 0) {
             firstEventTime = now;
         }
 
-        tabs.push({
-            t: Math.round(now - firstEventTime),
-            key: event.key,
-        });
+        if (tabs.length < MAX_TABS) {
+            activeKeys.set(event.key, tabs.length);
+            tabs.push({
+                t: Math.round(now - firstEventTime),
+                key: key,
+                dur: 0,
+            });
+        }
+    }
+
+    /**
+     * Enregistre le keyup pour calculer la durée d'appui (dwell time).
+     *
+     * Écouté sur document en capture phase pour capter les keyup même si
+     * le focus a bougé entre le keydown et le keyup.
+     *
+     * @param {KeyboardEvent} event Événement keyup.
+     */
+    function handleKeyUp(event) {
+        if (frozen || !activeKeys.has(event.key)) {
+            return;
+        }
+
+        var now = performance.now();
+        var index = activeKeys.get(event.key);
+        if (index < tabs.length) {
+            tabs[index].dur = Math.round(now - firstEventTime) - tabs[index].t;
+        }
+        activeKeys.delete(event.key);
     }
 
     /**
@@ -176,16 +233,18 @@ function createEventLogger(form) {
         const centerX = rect.left + rect.width / 2;
         const centerY = rect.top + rect.height / 2;
 
-        const isClick = event.type === 'click' || event.type === 'touchend';
         const isTouch = event.type === 'touchend';
+        // Un clic clavier (Space/Enter) a event.detail === 0.
+        const isRealClick = event.type === 'click' && event.detail > 0;
+        const isKeyboardClick = event.type === 'click' && event.detail === 0;
 
         let clientX = 0;
         let clientY = 0;
 
-        if (event.type === 'touchend' && event.changedTouches && event.changedTouches.length) {
+        if (isTouch && event.changedTouches && event.changedTouches.length) {
             clientX = event.changedTouches[0].clientX;
             clientY = event.changedTouches[0].clientY;
-        } else if (event.clientX !== undefined) {
+        } else if (isRealClick && event.clientX !== undefined) {
             clientX = event.clientX;
             clientY = event.clientY;
         }
@@ -193,7 +252,7 @@ function createEventLogger(form) {
         let type = 'key';
         if (isTouch) {
             type = 'touch';
-        } else if (isClick) {
+        } else if (isRealClick) {
             type = 'click';
         }
 
@@ -209,6 +268,13 @@ function createEventLogger(form) {
                 x: Math.round(clientX - centerX),
                 y: Math.round(clientY - centerY),
             };
+
+            // CDP leak : un vrai navigateur desktop a screenX > clientX
+            // (position fenêtre + chrome). CDP Playwright : screenX === clientX → delta = 0.
+            if (event.screenX !== undefined) {
+                checkEvent.screenDx = Math.round(event.screenX - event.clientX);
+                checkEvent.screenDy = Math.round(event.screenY - event.clientY);
+            }
         }
 
         frozen = true;
@@ -222,12 +288,14 @@ function createEventLogger(form) {
         form.addEventListener('touchmove', handleTouchMove, { passive: true });
         form.addEventListener('focusin', handleFocusIn, { passive: true });
         form.addEventListener('keydown', handleKeyDown, { passive: true });
+        document.addEventListener('keyup', handleKeyUp, true);
 
         cleanupFns.push(
             function cleanupMouseMove() { form.removeEventListener('mousemove', handleMouseMove); },
             function cleanupTouchMove() { form.removeEventListener('touchmove', handleTouchMove); },
             function cleanupFocusIn() { form.removeEventListener('focusin', handleFocusIn); },
-            function cleanupKeyDown() { form.removeEventListener('keydown', handleKeyDown); }
+            function cleanupKeyDown() { form.removeEventListener('keydown', handleKeyDown); },
+            function cleanupKeyUp() { document.removeEventListener('keyup', handleKeyUp, true); }
         );
     }
 
@@ -246,12 +314,22 @@ function createEventLogger(form) {
     function getPayload() {
         const dt = checkEvent ? checkEvent.t : (firstEventTime ? Math.round(performance.now() - firstEventTime) : 0);
 
-        return {
+        var payload = {
             moves: moves,
             check: checkEvent || { type: 'click', t: 0 },
             tabs: tabs,
             dt: dt,
+            moveCount: totalMoveCount,
         };
+
+        // Moyenne des coalesced events par mousemove.
+        // Vrai navigateur : > 1 (hardware envoie plusieurs positions par frame).
+        // CDP : toujours 1.0 (un event dispatché par appel).
+        if (coalescedMoveCount > 0) {
+            payload.coalescedAvg = Math.round((coalescedTotal / coalescedMoveCount) * 100) / 100;
+        }
+
+        return payload;
     }
 
     /**

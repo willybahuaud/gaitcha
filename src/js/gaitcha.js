@@ -20,15 +20,48 @@ import { initGaitchaForm } from './GaitchaForm.js';
 const instances = [];
 
 /**
+ * Vérifie qu'une URL est same-origin ou un chemin relatif.
+ *
+ * @param {string} url URL à vérifier.
+ * @return {boolean} True si l'URL est safe.
+ */
+function isSameOrigin(url) {
+    // Les chemins relatifs sont toujours safe.
+    if (url.startsWith('/') && !url.startsWith('//')) {
+        return true;
+    }
+
+    try {
+        var parsed = new URL(url, window.location.origin);
+        return parsed.origin === window.location.origin;
+    } catch (e) {
+        return false;
+    }
+}
+
+/**
  * Initialise Gaitcha sur un formulaire spécifique.
  *
  * @param {HTMLFormElement} form     Formulaire à protéger.
- * @param {string}          endpoint URL de l'endpoint Ajax.
+ * @param {string}          endpoint URL de l'endpoint Ajax (doit être same-origin).
  * @param {object}          options  Options (label, etc.).
- * @return {object} Instance avec destroy().
+ * @return {object|null} Instance avec destroy(), ou null si refusé.
  */
 function init(form, endpoint, options) {
-    const instance = initGaitchaForm(form, endpoint, options || {});
+    // Double-init guard.
+    if (form.hasAttribute('data-gaitcha-initialized')) {
+        return null;
+    }
+
+    // Valider que l'endpoint est same-origin.
+    if (!isSameOrigin(endpoint)) {
+        console.warn('Gaitcha: endpoint must be same-origin.');
+        return null;
+    }
+
+    form.setAttribute('data-gaitcha-initialized', 'true');
+
+    var instance = initGaitchaForm(form, endpoint, options || {});
     instances.push({ form: form, instance: instance });
     return instance;
 }
@@ -38,6 +71,7 @@ function init(form, endpoint, options) {
  */
 function destroyAll() {
     instances.forEach(function destroyInstance(entry) {
+        entry.form.removeAttribute('data-gaitcha-initialized');
         entry.instance.destroy();
     });
     instances.length = 0;
@@ -47,11 +81,11 @@ function destroyAll() {
  * Auto-détection : initialise tous les formulaires avec data-gaitcha.
  */
 function autoInit() {
-    const forms = document.querySelectorAll('form[data-gaitcha]');
+    var forms = document.querySelectorAll('form[data-gaitcha]');
 
     forms.forEach(function initForm(form) {
-        const endpoint = form.getAttribute('data-gaitcha-endpoint') || '/captcha/init';
-        const label = form.getAttribute('data-gaitcha-label') || undefined;
+        var endpoint = form.getAttribute('data-gaitcha-endpoint') || '/captcha/init';
+        var label = form.getAttribute('data-gaitcha-label') || undefined;
 
         init(form, endpoint, { label: label });
     });

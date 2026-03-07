@@ -72,21 +72,33 @@ class ValidationResult
         return new self(self::STATUS_REJECTED, $reason, $score, $debug);
     }
 
+    /**
+     * @return bool True si la soumission est acceptée.
+     */
     public function isAccepted(): bool
     {
         return $this->status === self::STATUS_ACCEPTED;
     }
 
+    /**
+     * @return string 'accepted' ou 'rejected'.
+     */
     public function getStatus(): string
     {
         return $this->status;
     }
 
+    /**
+     * @return string|null Motif de rejet, null si accepted.
+     */
     public function getReason(): ?string
     {
         return $this->reason;
     }
 
+    /**
+     * @return float Score comportemental (0.0 à 1.0).
+     */
     public function getScore(): float
     {
         return $this->score;

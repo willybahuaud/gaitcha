@@ -24,10 +24,12 @@ function attachSubmitSerializer(form, getPayload, getLogInput) {
         logInput.value = JSON.stringify(payload);
     }
 
-    form.addEventListener('submit', handleSubmit);
+    // Capture phase : garantit que le log est sérialisé AVANT
+    // tout autre listener submit (qui utiliserait FormData).
+    form.addEventListener('submit', handleSubmit, true);
 
     return function cleanup() {
-        form.removeEventListener('submit', handleSubmit);
+        form.removeEventListener('submit', handleSubmit, true);
     };
 }
 

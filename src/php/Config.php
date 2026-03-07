@@ -54,8 +54,8 @@ class Config
      */
     public function __construct(array $options)
     {
-        if (empty($options['secret'])) {
-            throw new \InvalidArgumentException('Gaitcha: secret is required.');
+        if (!isset($options['secret']) || !is_string($options['secret']) || strlen($options['secret']) < 32) {
+            throw new \InvalidArgumentException('Gaitcha: secret must be a string of at least 32 characters.');
         }
 
         $this->secret         = $options['secret'];
@@ -68,55 +68,98 @@ class Config
         $this->antiReplay     = (bool) ($options['anti_replay'] ?? false);
         $this->tokenStore     = $options['token_store'] ?? null;
 
-        if ($this->antiReplay && $this->tokenStore === null) {
-            throw new \InvalidArgumentException('Gaitcha: token_store is required when anti_replay is enabled.');
+        if ($this->ttl < 1) {
+            throw new \InvalidArgumentException('Gaitcha: ttl must be a positive integer.');
+        }
+
+        if ($this->scoreThreshold < 0.0 || $this->scoreThreshold > 1.0) {
+            throw new \InvalidArgumentException('Gaitcha: score_threshold must be between 0.0 and 1.0.');
         }
 
         if (!in_array($this->noJsFallback, ['reject', 'allow'], true)) {
             throw new \InvalidArgumentException('Gaitcha: no_js_fallback must be "reject" or "allow".');
         }
+
+        if (strpos($this->fieldPrefix, '.') !== false) {
+            throw new \InvalidArgumentException('Gaitcha: field_prefix must not contain dots.');
+        }
+
+        if (strpos($this->tokenFieldName, '.') !== false) {
+            throw new \InvalidArgumentException('Gaitcha: token_field_name must not contain dots.');
+        }
+
+        if ($this->antiReplay && $this->tokenStore === null) {
+            throw new \InvalidArgumentException('Gaitcha: token_store is required when anti_replay is enabled.');
+        }
     }
 
+    /**
+     * @return string Clé secrète HMAC.
+     */
     public function getSecret(): string
     {
         return $this->secret;
     }
 
+    /**
+     * @return int Durée de validité du token en secondes.
+     */
     public function getTtl(): int
     {
         return $this->ttl;
     }
 
+    /**
+     * @return float Seuil minimum du score comportemental (0.0 à 1.0).
+     */
     public function getScoreThreshold(): float
     {
         return $this->scoreThreshold;
     }
 
+    /**
+     * @return bool True si le mode debug est actif.
+     */
     public function isDebug(): bool
     {
         return $this->debug;
     }
 
+    /**
+     * @return string 'reject' ou 'allow'.
+     */
     public function getNoJsFallback(): string
     {
         return $this->noJsFallback;
     }
 
+    /**
+     * @return string Nom du champ hidden contenant le token signé.
+     */
     public function getTokenFieldName(): string
     {
         return $this->tokenFieldName;
     }
 
+    /**
+     * @return string Préfixe des noms de champs générés.
+     */
     public function getFieldPrefix(): string
     {
         return $this->fieldPrefix;
     }
 
+    /**
+     * @return bool True si la protection anti-replay est active.
+     */
     public function isAntiReplay(): bool
     {
         return $this->antiReplay;
     }
 
+    /**
+     * @return TokenStoreInterface|null Store pour l'anti-replay, null si désactivé.
+     */
     public function getTokenStore(): ?TokenStoreInterface
     {
         return $this->tokenStore;

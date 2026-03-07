@@ -10,13 +10,35 @@ namespace Gaitcha;
  * Le log attendu est un JSON avec cette structure :
  * {
  *   "moves": [{"t": int, "x": int, "y": int}, ...],
- *   "check": {"type": "click"|"key", "t": int, ...},
- *   "tabs":  [{"t": int, "key": string}, ...],
- *   "dt":    int
+ *   "check": {"type": "click"|"key"|"touch", "t": int, "screenDx"?: int, "screenDy"?: int, ...},
+ *   "tabs":  [{"t": int, "key": string, "dur": int}, ...],
+ *   "dt":    int,
+ *   "coalescedAvg"?: float,
+ *   "moveCount"?: int
  * }
+ *
+ * Champs optionnels :
+ * - "dur" (tabs) : durée keydown→keyup en ms. Absent ou 0 si keyup non capté.
+ * - "screenDx"/"screenDy" (check) : delta screenX-clientX / screenY-clientY.
+ *   Vaut 0 en CDP Playwright (leak de détection), > 0 en vrai navigateur desktop.
+ * - "coalescedAvg" (log root) : moyenne de getCoalescedEvents().length par mousemove.
+ *   > 1 en vrai navigateur (hardware buffer), = 1 en CDP. Absent si non supporté (Safari).
+ * - "moveCount" (log root) : nombre total de mousemove reçus avant throttle/buffer circulaire.
  */
 class BehavioralLogParser
 {
+    /** Taille maximale du log JSON en octets (32 Ko). */
+    private const MAX_JSON_SIZE = 32768;
+
+    /** Nombre maximum de moves acceptés. */
+    private const MAX_MOVES = 100;
+
+    /** Nombre maximum de tabs acceptés. */
+    private const MAX_TABS = 50;
+
+    /** Profondeur maximale du JSON. */
+    private const MAX_JSON_DEPTH = 10;
+
     /**
      * Parse le log JSON et retourne un tableau structuré.
      *
@@ -25,11 +47,15 @@ class BehavioralLogParser
      */
     public function parse(string $json): array
     {
-        if (empty($json)) {
+        if ($json === '') {
             return $this->invalid('Log vide.');
         }
 
-        $data = json_decode($json, true);
+        if (strlen($json) > self::MAX_JSON_SIZE) {
+            return $this->invalid('Log trop volumineux.');
+        }
+
+        $data = json_decode($json, true, self::MAX_JSON_DEPTH);
 
         if (!is_array($data)) {
             return $this->invalid('JSON invalide.');
@@ -51,14 +77,25 @@ class BehavioralLogParser
             return $this->invalid('Champ "dt" manquant.');
         }
 
-        // Normaliser les champs optionnels.
-        $data['moves'] = $this->validateMoves($data['moves'] ?? []);
-        $data['tabs']  = $this->validateTabs($data['tabs'] ?? []);
-        $data['dt']    = (int) $data['dt'];
+        // Normaliser, limiter, et ne garder que les champs attendus.
+        $clean = [
+            'moves' => array_slice($this->validateMoves($data['moves'] ?? []), 0, self::MAX_MOVES),
+            'tabs'  => array_slice($this->validateTabs($data['tabs'] ?? []), 0, self::MAX_TABS),
+            'check' => $data['check'],
+            'dt'    => (int) $data['dt'],
+        ];
+
+        // Champs optionnels anti-CDP — présents uniquement si le client les envoie.
+        if (isset($data['coalescedAvg']) && is_numeric($data['coalescedAvg'])) {
+            $clean['coalescedAvg'] = (float) $data['coalescedAvg'];
+        }
+        if (isset($data['moveCount']) && is_numeric($data['moveCount'])) {
+            $clean['moveCount'] = (int) $data['moveCount'];
+        }
 
         return [
             'valid'  => true,
-            'data'   => $data,
+            'data'   => $clean,
             'reason' => null,
         ];
     }
@@ -75,20 +112,32 @@ class BehavioralLogParser
             return [];
         }
 
-        return array_values(array_filter($moves, function ($move): bool {
-            return is_array($move)
-                && isset($move['t'], $move['x'], $move['y'])
-                && is_numeric($move['t'])
-                && is_numeric($move['x'])
-                && is_numeric($move['y']);
-        }));
+        return array_values(array_filter($moves, [$this, 'isValidMove']));
+    }
+
+    /**
+     * Vérifie qu'une entrée move a le bon format.
+     *
+     * @param mixed $move Entrée brute.
+     * @return bool True si valide.
+     */
+    private function isValidMove($move): bool
+    {
+        return is_array($move)
+            && isset($move['t'], $move['x'], $move['y'])
+            && is_numeric($move['t'])
+            && is_numeric($move['x'])
+            && is_numeric($move['y']);
     }
 
     /**
      * Valide et filtre les entrées tab/focus.
      *
+     * Chaque entrée contient au minimum {t, key}. Le champ optionnel "dur"
+     * (durée d'appui en ms) est préservé s'il est présent.
+     *
      * @param mixed $tabs Données brutes.
-     * @return array<int, array{t: int, key: string}>
+     * @return array<int, array{t: int, key: string, dur?: int}>
      */
     private function validateTabs($tabs): array
     {
@@ -96,11 +145,20 @@ class BehavioralLogParser
             return [];
         }
 
-        return array_values(array_filter($tabs, function ($tab): bool {
-            return is_array($tab)
-                && isset($tab['t'])
-                && is_numeric($tab['t']);
-        }));
+        return array_values(array_filter($tabs, [$this, 'isValidTab']));
+    }
+
+    /**
+     * Vérifie qu'une entrée tab a le bon format.
+     *
+     * @param mixed $tab Entrée brute.
+     * @return bool True si valide.
+     */
+    private function isValidTab($tab): bool
+    {
+        return is_array($tab)
+            && isset($tab['t'])
+            && is_numeric($tab['t']);
     }
 
     /**

@@ -10,12 +10,14 @@ use PHPUnit\Framework\TestCase;
 
 class TokenGeneratorTest extends TestCase
 {
+    private const SECRET = 'test-secret-key-for-gaitcha-unit-tests!';
+
     private TokenGenerator $generator;
     private Config $config;
 
     protected function setUp(): void
     {
-        $this->config    = new Config(['secret' => 'test-secret-key']);
+        $this->config    = new Config(['secret' => self::SECRET]);
         $this->generator = new TokenGenerator($this->config);
     }
 
@@ -38,7 +40,7 @@ class TokenGeneratorTest extends TestCase
 
     public function testGenerateFieldNameCustomPrefix(): void
     {
-        $config    = new Config(['secret' => 'test', 'field_prefix' => '_custom_']);
+        $config    = new Config(['secret' => self::SECRET, 'field_prefix' => '_custom_']);
         $generator = new TokenGenerator($config);
         $name      = $generator->generateFieldName();
 
@@ -58,11 +60,11 @@ class TokenGeneratorTest extends TestCase
 
     public function testGenerateTokenSignatureIsValid(): void
     {
-        $fieldName = '_gc_test1234';
+        $fieldName = '_gc_aabb1234';
         $timestamp = 1700000000;
         $token     = $this->generator->generateToken($fieldName, $timestamp);
 
-        $expectedSignature = hash_hmac('sha256', $fieldName . '.' . $timestamp, 'test-secret-key');
+        $expectedSignature = hash_hmac('sha256', $fieldName . '.' . $timestamp, self::SECRET);
 
         $parts = explode('.', $token);
         $this->assertSame($expectedSignature, $parts[2]);
@@ -70,11 +72,11 @@ class TokenGeneratorTest extends TestCase
 
     public function testGenerateTokenDifferentSecretsProduceDifferentSignatures(): void
     {
-        $config2    = new Config(['secret' => 'other-secret']);
+        $config2    = new Config(['secret' => 'other-secret-key-for-gaitcha-different!']);
         $generator2 = new TokenGenerator($config2);
 
-        $token1 = $this->generator->generateToken('_gc_test', 1700000000);
-        $token2 = $generator2->generateToken('_gc_test', 1700000000);
+        $token1 = $this->generator->generateToken('_gc_ccdd5678', 1700000000);
+        $token2 = $generator2->generateToken('_gc_ccdd5678', 1700000000);
 
         $this->assertNotSame($token1, $token2);
     }

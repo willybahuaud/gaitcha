@@ -15,6 +15,9 @@ abstract class AbstractEndpoint
     protected Config $config;
     private TokenGenerator $tokenGenerator;
 
+    /**
+     * @param Config $config Configuration Gaitcha.
+     */
     public function __construct(Config $config)
     {
         $this->config         = $config;

@@ -10,7 +10,7 @@
  * Crée un injecteur DOM pour un formulaire.
  *
  * @param {HTMLFormElement} form Formulaire cible.
- * @return {object} Injecteur avec inject(), update(), getCheckbox(), destroy().
+ * @return {object} Injecteur avec inject(), update(), getCheckbox(), getLogInput(), destroy().
  */
 function createDOMInjector(form) {
     /** @type {HTMLDivElement|null} */

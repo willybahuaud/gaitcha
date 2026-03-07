@@ -266,7 +266,7 @@ class ValidationOrchestratorTest extends TestCase
     // --- Helpers ---
 
     /**
-     * @return array Log humain réaliste (profil mouse).
+     * @return array Log humain réaliste (profil mouse, avec tabs et dwell time).
      */
     private function buildHumanMouseLog(): array
     {
@@ -290,14 +290,23 @@ class ValidationOrchestratorTest extends TestCase
                 ['t' => 570, 'x' => 305, 'y' => 260],
             ],
             'check' => [
-                'type'   => 'click',
-                't'      => 620,
-                'x'      => 305,
-                'y'      => 260,
-                'offset' => ['x' => 4, 'y' => -3],
+                'type'     => 'click',
+                't'        => 620,
+                'x'        => 305,
+                'y'        => 260,
+                'offset'   => ['x' => 4, 'y' => -3],
+                'screenDx' => 85,
+                'screenDy' => 132,
             ],
-            'tabs'  => [],
-            'dt'    => 620,
+            'tabs'  => [
+                ['t' => 50, 'key' => 'Tab', 'dur' => 68],
+                ['t' => 130, 'key' => 'focus', 'dur' => 0],
+                ['t' => 200, 'key' => 'Tab', 'dur' => 75],
+                ['t' => 280, 'key' => 'focus', 'dur' => 0],
+            ],
+            'dt'           => 620,
+            'coalescedAvg' => 2.4,
+            'moveCount'    => 48,
         ];
     }
 }

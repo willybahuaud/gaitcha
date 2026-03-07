@@ -63,7 +63,7 @@ function initGaitchaForm(form, endpoint, options) {
             })
             .catch(function onFetchError(error) {
                 // eslint-disable-next-line no-console
-                console.warn('Gaitcha: init failed', error);
+                console.warn('Gaitcha: initialization failed.');
             });
     }
 
@@ -79,6 +79,9 @@ function initGaitchaForm(form, endpoint, options) {
          * @param {MouseEvent} event Événement click.
          */
         function handleClick(event) {
+            if (event.isTrusted === false) {
+                return;
+            }
             if (checkbox.checked) {
                 logger.recordCheck(checkbox, event);
             }
@@ -90,6 +93,9 @@ function initGaitchaForm(form, endpoint, options) {
          * @param {TouchEvent} event Événement touchend.
          */
         function handleTouchEnd(event) {
+            if (event.isTrusted === false) {
+                return;
+            }
             if (checkbox.checked) {
                 logger.recordCheck(checkbox, event);
             }
@@ -101,6 +107,9 @@ function initGaitchaForm(form, endpoint, options) {
          * @param {KeyboardEvent} event Événement keydown.
          */
         function handleKeyDown(event) {
+            if (event.isTrusted === false) {
+                return;
+            }
             if ((event.key === ' ' || event.key === 'Enter') && checkbox.checked) {
                 logger.recordCheck(checkbox, event);
             }

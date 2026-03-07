@@ -14,6 +14,9 @@ class TokenValidator
 {
     private Config $config;
 
+    /**
+     * @param Config $config Configuration Gaitcha.
+     */
     public function __construct(Config $config)
     {
         $this->config = $config;
@@ -40,23 +43,22 @@ class TokenValidator
 
         [$fieldName, $timestampStr, $signature] = $parts;
 
+        // Valider le format du field name (préfixe + 8 hex).
+        $prefix  = preg_quote($this->config->getFieldPrefix(), '/');
+        $pattern = '/^' . $prefix . '[a-f0-9]{8}$/';
+
+        if (!preg_match($pattern, $fieldName)) {
+            return $this->invalid(ValidationResult::REASON_TOKEN_INVALID);
+        }
+
         if (!ctype_digit($timestampStr)) {
             return $this->invalid(ValidationResult::REASON_TOKEN_INVALID);
         }
 
         $timestamp = (int) $timestampStr;
 
-        // Vérifier l'expiration avant la signature
-        // pour éviter de consommer du CPU sur un token expiré.
-        if (($currentTime - $timestamp) > $this->config->getTtl()) {
-            return $this->invalid(ValidationResult::REASON_TOKEN_EXPIRED);
-        }
-
-        // Token dans le futur = forgé ou horloge décalée.
-        if ($timestamp > $currentTime) {
-            return $this->invalid(ValidationResult::REASON_TOKEN_INVALID);
-        }
-
+        // Toujours vérifier la signature en premier pour ne pas
+        // fournir d'oracle (expired vs invalid) à un attaquant.
         $expectedSignature = hash_hmac(
             'sha256',
             $fieldName . '.' . $timestampStr,
@@ -65,6 +67,16 @@ class TokenValidator
 
         if (!hash_equals($expectedSignature, $signature)) {
             return $this->invalid(ValidationResult::REASON_TOKEN_INVALID);
+        }
+
+        // Token dans le futur = forgé ou horloge décalée.
+        if ($timestamp > $currentTime) {
+            return $this->invalid(ValidationResult::REASON_TOKEN_INVALID);
+        }
+
+        // Vérifier l'expiration après la signature.
+        if (($currentTime - $timestamp) > $this->config->getTtl()) {
+            return $this->invalid(ValidationResult::REASON_TOKEN_EXPIRED);
         }
 
         return [

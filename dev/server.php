@@ -34,7 +34,7 @@ if ($uri === '/' && $_SERVER['REQUEST_METHOD'] === 'GET') {
 }
 
 $config = new Config([
-    'secret' => 'dev-secret-key-change-me',
+    'secret' => 'dev-secret-key-change-me-before-production!',
     'ttl'    => 120,
     'debug'  => true,
 ]);
@@ -71,7 +71,7 @@ if ($uri === '/submit' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $result       = $orchestrator->validate($_POST);
 
     header('Content-Type: application/json');
-    echo json_encode($result->toArray(true), JSON_PRETTY_PRINT);
+    echo json_encode($result->toArray($config->isDebug()), JSON_PRETTY_PRINT);
     return;
 }
 

@@ -151,10 +151,14 @@ class BehavioralScorerTest extends TestCase
             'moves' => [],
             'check' => ['type' => 'key', 't' => 2000],
             'tabs'  => [
-                ['t' => 100, 'key' => 'Tab'],
-                ['t' => 350, 'key' => 'Tab'],
-                ['t' => 520, 'key' => 'Tab'],
-                ['t' => 1800, 'key' => 'Tab'],
+                ['t' => 100, 'key' => 'Tab', 'dur' => 72],
+                ['t' => 180, 'key' => 'focus', 'dur' => 0],
+                ['t' => 350, 'key' => 'Tab', 'dur' => 65],
+                ['t' => 430, 'key' => 'focus', 'dur' => 0],
+                ['t' => 520, 'key' => 'Tab', 'dur' => 110],
+                ['t' => 600, 'key' => 'Shift+Tab', 'dur' => 88],
+                ['t' => 680, 'key' => 'focus', 'dur' => 0],
+                ['t' => 1800, 'key' => ' ', 'dur' => 95],
             ],
             'dt'    => 2000,
         ];
@@ -169,24 +173,104 @@ class BehavioralScorerTest extends TestCase
 
     public function testBotRegularTabTimingScoresLow(): void
     {
-        // Tabs parfaitement réguliers (100ms chacun).
+        // Tabs parfaitement réguliers (100ms chacun), dur uniforme, 0 rollover.
         $log = [
             'moves' => [],
             'check' => ['type' => 'key', 't' => 600],
             'tabs'  => [
-                ['t' => 100, 'key' => 'Tab'],
-                ['t' => 200, 'key' => 'Tab'],
-                ['t' => 300, 'key' => 'Tab'],
-                ['t' => 400, 'key' => 'Tab'],
-                ['t' => 500, 'key' => 'Tab'],
+                ['t' => 100, 'key' => 'Tab', 'dur' => 50],
+                ['t' => 200, 'key' => 'Tab', 'dur' => 50],
+                ['t' => 300, 'key' => 'Tab', 'dur' => 50],
+                ['t' => 400, 'key' => 'Tab', 'dur' => 50],
+                ['t' => 500, 'key' => 'Tab', 'dur' => 50],
             ],
             'dt'    => 600,
         ];
 
         $result = $this->scorer->score($log);
 
-        // La variance de timing est nulle → score bas sur ce critère.
         $this->assertLessThanOrEqual(0.7, $result['score']);
+    }
+
+    public function testBotKeyboardUniformTimingScoresLow(): void
+    {
+        // Bot Playwright : tabs à intervalles parfaitement réguliers (150ms),
+        // dur uniforme (45ms), 0 rollover, pas de Shift+Tab.
+        $log = [
+            'moves' => [],
+            'check' => ['type' => 'key', 't' => 900],
+            'tabs'  => [
+                ['t' => 100, 'key' => 'Tab', 'dur' => 45],
+                ['t' => 250, 'key' => 'Tab', 'dur' => 45],
+                ['t' => 400, 'key' => 'Tab', 'dur' => 45],
+                ['t' => 550, 'key' => 'Tab', 'dur' => 45],
+                ['t' => 700, 'key' => 'Tab', 'dur' => 45],
+                ['t' => 850, 'key' => ' ', 'dur' => 45],
+            ],
+            'dt'    => 900,
+        ];
+
+        $result = $this->scorer->score($log);
+
+        $this->assertLessThan(0.5, $result['score'], 'Un bot clavier uniforme doit scorer < 0.5');
+    }
+
+    // --- Multi-profil ---
+
+    public function testMixedMouseKeyboardUsesMaxScore(): void
+    {
+        // Humain qui navigue au clavier mais a aussi bougé la souris.
+        // check='key' → profil primaire keyboard, profil secondaire mouse.
+        $log = [
+            'moves' => [
+                ['t' => 0,   'x' => 200, 'y' => 300],
+                ['t' => 35,  'x' => 218, 'y' => 293],
+                ['t' => 70,  'x' => 240, 'y' => 284],
+                ['t' => 110, 'x' => 265, 'y' => 278],
+                ['t' => 150, 'x' => 282, 'y' => 271],
+                ['t' => 185, 'x' => 296, 'y' => 268],
+                ['t' => 225, 'x' => 312, 'y' => 263],
+                ['t' => 275, 'x' => 308, 'y' => 264],
+                ['t' => 330, 'x' => 305, 'y' => 262],
+                ['t' => 400, 'x' => 306, 'y' => 261],
+                ['t' => 480, 'x' => 305, 'y' => 261],
+                ['t' => 570, 'x' => 305, 'y' => 260],
+            ],
+            'check' => ['type' => 'key', 't' => 2000],
+            'tabs'  => [
+                ['t' => 800, 'key' => 'Tab', 'dur' => 70],
+                ['t' => 1800, 'key' => ' ', 'dur' => 100],
+            ],
+            'dt'    => 2000,
+        ];
+
+        $result = $this->scorer->score($log);
+
+        // Le profil secondaire (mouse) doit remonter le score.
+        $this->assertGreaterThan(0.5, $result['score'], 'Un humain mixte mouse+keyboard doit scorer > 0.5');
+    }
+
+    public function testPrimaryCenterClickKillNotBypassedByKeyboard(): void
+    {
+        // check='click' avec offset (0,0) → kill signal mouse autoritaire.
+        // Même avec des tabs valides, le kill signal prime.
+        $log = [
+            'moves' => [
+                ['t' => 0, 'x' => 100, 'y' => 100],
+                ['t' => 50, 'x' => 110, 'y' => 110],
+            ],
+            'check' => ['type' => 'click', 't' => 500, 'offset' => ['x' => 0, 'y' => 0]],
+            'tabs'  => [
+                ['t' => 100, 'key' => 'Tab', 'dur' => 70],
+                ['t' => 250, 'key' => 'Tab', 'dur' => 65],
+                ['t' => 400, 'key' => 'Shift+Tab', 'dur' => 80],
+            ],
+            'dt'    => 500,
+        ];
+
+        $result = $this->scorer->score($log);
+
+        $this->assertSame(0.0, $result['score'], 'Kill signal du profil primaire ne doit pas etre contourne');
     }
 
     // --- Profil touch ---
@@ -224,13 +308,118 @@ class BehavioralScorerTest extends TestCase
         $this->assertSame(0.0, $result['score']);
     }
 
+    // --- Speed autocorrelation ---
+
+    public function testSpeedAutocorrelationHighForHuman(): void
+    {
+        $log = $this->buildHumanMouseLog();
+
+        $result = $this->scorer->score($log);
+
+        // La trajectoire humaine a une inertie physique → autocorrelation élevée.
+        $this->assertArrayHasKey('speed_autocorrelation', $result['details']);
+        $this->assertGreaterThan(0.5, $result['details']['speed_autocorrelation']);
+    }
+
+    public function testSpeedAutocorrelationLowForRandomBot(): void
+    {
+        // Bot avec délais random entre chaque point → vitesses indépendantes.
+        $moves = [];
+        $t     = 0;
+        for ($i = 0; $i < 15; $i++) {
+            $moves[] = ['t' => $t, 'x' => $i * 20, 'y' => 200];
+            // Intervalles très variables (alternance rapide/lent sans corrélation).
+            $t += ($i % 2 === 0) ? 10 : 200;
+        }
+
+        $log = [
+            'moves' => $moves,
+            'check' => ['type' => 'click', 't' => $t + 100, 'offset' => ['x' => 3, 'y' => -2], 'screenDx' => 50, 'screenDy' => 80],
+            'tabs'  => [],
+            'dt'    => $t + 100,
+            'coalescedAvg' => 2.0,
+        ];
+
+        $result = $this->scorer->score($log);
+
+        $this->assertArrayHasKey('speed_autocorrelation', $result['details']);
+        $this->assertLessThan(0.5, $result['details']['speed_autocorrelation']);
+    }
+
+    // --- CDP screen delta ---
+
+    public function testCdpScreenDeltaKillsBot(): void
+    {
+        $log = $this->buildHumanMouseLog();
+        // CDP : screenX === clientX → delta 0.
+        $log['check']['screenDx'] = 0;
+        $log['check']['screenDy'] = 0;
+
+        $result = $this->scorer->score($log);
+
+        $this->assertSame(0.0, $result['details']['cdp_screen_delta']);
+    }
+
+    public function testCdpScreenDeltaPassesHuman(): void
+    {
+        $log = $this->buildHumanMouseLog();
+        // Vrai navigateur : screenX - clientX > 0.
+        $log['check']['screenDx'] = 50;
+        $log['check']['screenDy'] = 80;
+
+        $result = $this->scorer->score($log);
+
+        $this->assertSame(1.0, $result['details']['cdp_screen_delta']);
+    }
+
+    // --- Coalesced ratio ---
+
+    public function testCoalescedRatioDetectsBot(): void
+    {
+        $log = $this->buildHumanMouseLog();
+        // CDP : un event dispatché par appel → coalescedAvg = 1.0.
+        $log['coalescedAvg'] = 1.0;
+
+        $result = $this->scorer->score($log);
+
+        $this->assertSame(0.0, $result['details']['coalesced_ratio']);
+    }
+
+    // --- Timing autocorrelation (clavier) ---
+
+    public function testTimingAutocorrelationLowForRandomBot(): void
+    {
+        // Bot avec intervalles aléatoires indépendants entre tabs.
+        $log = [
+            'moves' => [],
+            'check' => ['type' => 'key', 't' => 3000],
+            'tabs'  => [
+                ['t' => 100, 'key' => 'Tab', 'dur' => 70],
+                ['t' => 500, 'key' => 'focus', 'dur' => 0],
+                ['t' => 550, 'key' => 'Tab', 'dur' => 65],
+                ['t' => 1200, 'key' => 'focus', 'dur' => 0],
+                ['t' => 1220, 'key' => 'Tab', 'dur' => 80],
+                ['t' => 1900, 'key' => 'focus', 'dur' => 0],
+                ['t' => 1910, 'key' => 'Tab', 'dur' => 72],
+                ['t' => 2800, 'key' => ' ', 'dur' => 90],
+            ],
+            'dt' => 3000,
+        ];
+
+        $result = $this->scorer->score($log);
+
+        $this->assertArrayHasKey('timing_autocorrelation', $result['details']);
+        $this->assertLessThan(0.7, $result['details']['timing_autocorrelation']);
+    }
+
     // --- Helpers ---
 
     /**
      * Construit un log d'interaction souris humain réaliste.
      *
      * Inclut micro-corrections (overshoot en X puis retour), décélération
-     * dans le dernier tiers, et angles irréguliers entre segments.
+     * dans le dernier tiers, angles irréguliers entre segments, et quelques
+     * tabs avec dwell time (l'humain a aussi navigué au clavier).
      *
      * @return array Log structuré.
      */
@@ -256,14 +445,23 @@ class BehavioralScorerTest extends TestCase
                 ['t' => 570, 'x' => 305, 'y' => 260],
             ],
             'check' => [
-                'type'   => 'click',
-                't'      => 620,
-                'x'      => 305,
-                'y'      => 260,
-                'offset' => ['x' => 4, 'y' => -3],
+                'type'     => 'click',
+                't'        => 620,
+                'x'        => 305,
+                'y'        => 260,
+                'offset'   => ['x' => 4, 'y' => -3],
+                'screenDx' => 85,
+                'screenDy' => 132,
             ],
-            'tabs'  => [],
-            'dt'    => 620,
+            'tabs'  => [
+                ['t' => 50, 'key' => 'Tab', 'dur' => 68],
+                ['t' => 130, 'key' => 'focus', 'dur' => 0],
+                ['t' => 200, 'key' => 'Tab', 'dur' => 75],
+                ['t' => 280, 'key' => 'focus', 'dur' => 0],
+            ],
+            'dt'           => 620,
+            'coalescedAvg' => 2.4,
+            'moveCount'    => 48,
         ];
     }
 }

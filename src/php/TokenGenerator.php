@@ -15,6 +15,9 @@ class TokenGenerator
 {
     private Config $config;
 
+    /**
+     * @param Config $config Configuration Gaitcha.
+     */
     public function __construct(Config $config)
     {
         $this->config = $config;

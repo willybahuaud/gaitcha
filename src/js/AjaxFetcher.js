@@ -4,11 +4,31 @@
  * Gère l'auto-refresh avant expiration du TTL.
  */
 
+/** Pattern attendu pour les field names (préfixe + 8 hex). */
+var FIELD_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
+/**
+ * Vérifie que la réponse de l'endpoint a le bon format.
+ *
+ * @param {*} data Réponse parsée.
+ * @return {boolean} True si le format est valide.
+ */
+function isValidResponse(data) {
+    return (
+        data !== null &&
+        typeof data === 'object' &&
+        typeof data.field_name === 'string' &&
+        FIELD_NAME_PATTERN.test(data.field_name) &&
+        typeof data.token === 'string' &&
+        data.token.length > 0
+    );
+}
+
 /**
  * Crée un fetcher pour un endpoint Gaitcha.
  *
  * @param {string} endpoint URL de l'endpoint /captcha/init.
- * @return {object} Fetcher avec fetch(), getFieldName(), getToken(), destroy().
+ * @return {object} Fetcher avec fetch(), onRefresh(), getFieldName(), getToken(), getTokenFieldName(), destroy().
  */
 function createAjaxFetcher(endpoint) {
     /** @type {string|null} */
@@ -47,10 +67,15 @@ function createAjaxFetcher(endpoint) {
             return response.json();
         })
         .then(function handleData(data) {
+            if (!isValidResponse(data)) {
+                throw new Error('Gaitcha: invalid endpoint response.');
+            }
+
             fieldName = data.field_name;
             token = data.token;
             tokenFieldName = data.token_field_name || '_ct';
-            ttl = data.ttl || 120;
+            // Borner le TTL entre 30s et 600s.
+            ttl = Math.max(30, Math.min(data.ttl || 120, 600));
 
             scheduleRefresh();
 
