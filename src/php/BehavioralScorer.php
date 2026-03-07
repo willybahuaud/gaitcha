@@ -99,15 +99,16 @@ class BehavioralScorer
         $speedVariationScore        = $this->calculateSpeedVariation($moves);
         $details['speed_variation'] = $speedVariationScore;
 
-        // Signal 5 : angular jitter — irrégularité des changements de direction (poids 0.20).
+        // Signal 5 : angular jitter — irrégularité des changements de direction (poids 0.10).
+        // Poids réduit : une Bézier quadratique produit aussi des angles variés (CV élevé).
         $angularJitterScore        = $this->calculateAngularJitter($moves);
         $details['angular_jitter'] = $angularJitterScore;
 
-        // Signal 6 : direction reversals — micro-corrections de trajectoire (poids 0.15).
+        // Signal 6 : direction reversals — micro-corrections de trajectoire (poids 0.20).
         $directionReversalsScore        = $this->calculateDirectionReversals($moves);
         $details['direction_reversals'] = $directionReversalsScore;
 
-        // Signal 7 : endpoint deceleration — décélération naturelle en fin de trajectoire (poids 0.15).
+        // Signal 7 : endpoint deceleration — décélération naturelle en fin de trajectoire (poids 0.20).
         $endpointDecelerationScore        = $this->calculateEndpointDeceleration($moves);
         $details['endpoint_deceleration'] = $endpointDecelerationScore;
 
@@ -115,9 +116,9 @@ class BehavioralScorer
                + ($nonLinearityScore * 0.10)
                + ($offsetScore * 0.10)
                + ($speedVariationScore * 0.10)
-               + ($angularJitterScore * 0.20)
-               + ($directionReversalsScore * 0.15)
-               + ($endpointDecelerationScore * 0.15);
+               + ($angularJitterScore * 0.10)
+               + ($directionReversalsScore * 0.20)
+               + ($endpointDecelerationScore * 0.20);
 
         return $this->result($score, 'mouse', $details);
     }
@@ -206,16 +207,16 @@ class BehavioralScorer
         $speedVariationScore        = count($moves) >= 2 ? $this->calculateSpeedVariation($moves) : 0.5;
         $details['speed_variation'] = $speedVariationScore;
 
-        // Signal 5 : angular jitter (poids 0.20).
+        // Signal 5 : angular jitter (poids 0.10).
         // Besoin d'au moins 4 points pour 2+ angles exploitables.
         $angularJitterScore        = count($moves) >= 4 ? $this->calculateAngularJitter($moves) : 0.5;
         $details['angular_jitter'] = $angularJitterScore;
 
-        // Signal 6 : direction reversals (poids 0.15).
+        // Signal 6 : direction reversals (poids 0.20).
         $directionReversalsScore        = count($moves) >= 4 ? $this->calculateDirectionReversals($moves) : 0.5;
         $details['direction_reversals'] = $directionReversalsScore;
 
-        // Signal 7 : endpoint deceleration (poids 0.15).
+        // Signal 7 : endpoint deceleration (poids 0.20).
         $endpointDecelerationScore        = count($moves) >= 6 ? $this->calculateEndpointDeceleration($moves) : 0.5;
         $details['endpoint_deceleration'] = $endpointDecelerationScore;
 
@@ -223,9 +224,9 @@ class BehavioralScorer
                + ($nonLinearityScore * 0.10)
                + ($offsetScore * 0.10)
                + ($speedVariationScore * 0.10)
-               + ($angularJitterScore * 0.20)
-               + ($directionReversalsScore * 0.15)
-               + ($endpointDecelerationScore * 0.15);
+               + ($angularJitterScore * 0.10)
+               + ($directionReversalsScore * 0.20)
+               + ($endpointDecelerationScore * 0.20);
 
         return $this->result($score, 'touch', $details);
     }
