@@ -1,41 +1,43 @@
 # Gaitcha
 
-Captcha self-hosted, sans dépendance externe. Une simple checkbox analyse le comportement de l'utilisateur — trajectoire souris, timing clavier, signaux physiologiques — pour distinguer un humain d'un bot. Zéro friction, zéro tracking.
+Self-hosted behavioral captcha. A simple checkbox analyzes how the user interacts with it — mouse trajectory, keyboard timing, physiological signals — to tell humans from bots. No third-party dependency, no tracking, no friction.
 
-## Pourquoi
+## Why
 
-Les captchas classiques (reCAPTCHA, hCaptcha) collectent des données utilisateur et dépendent de tiers. Les alternatives proof-of-work (altcha, mCaptcha) se font contourner par Playwright. Gaitcha analyse **comment** l'utilisateur interagit avec une checkbox visible — trajectoire, timing, offset du clic — pour distinguer un humain d'un bot.
+Most captcha solutions either rely on third-party services (sending user data to external servers) or use proof-of-work challenges that automated browsers can solve trivially.
 
-## Comment ça marche
+Gaitcha takes a different approach: it watches **how** the user reaches and checks a visible checkbox. Humans hesitate, deviate, decelerate, click slightly off-center. Bots click perfectly, instantly, without inertia. The behavioral log is scored server-side — no external API, no user fingerprinting, fully stateless.
 
-1. Le formulaire se charge normalement, sans champ captcha
-2. Au premier signal d'interaction (mousemove, touch, focus), une requête Ajax récupère un **token signé HMAC** et un **nom de champ aléatoire**
-3. Une checkbox visible est injectée dynamiquement dans le formulaire
-4. Le JS collecte les événements d'interaction (mouvements souris, tabs clavier, timing)
-5. Au submit, le log comportemental est envoyé avec le token
-6. Le serveur vérifie le token (signature + TTL) et **score le comportement** sur 10 signaux souris ou 9 signaux clavier : trajectoire, vitesse, autocorrelation, dwell time, rollover, détection CDP…
+## Quick Start
 
-Un bot clique au pixel parfait, instantanément, sans inertie. Un humain hésite, dévie, décélère, clique un peu à côté du centre.
-
-## Installation
+### Install
 
 ```bash
 composer require willybahuaud/gaitcha
 ```
 
-## Usage rapide
+### HTML
 
-### PHP — Endpoint init
+```html
+<form data-gaitcha data-gaitcha-endpoint="/captcha/init" method="POST" action="/submit">
+    <input type="text" name="name" required>
+    <input type="email" name="email" required>
+    <button type="submit">Send</button>
+</form>
+
+<script src="gaitcha.min.js"></script>
+```
+
+### PHP — Init endpoint
 
 ```php
 use Gaitcha\Config;
 use Gaitcha\AbstractEndpoint;
 
 $config = new Config([
-    'secret' => 'votre-cle-secrete',
+    'secret' => 'your-secret-key-at-least-32-characters',
 ]);
 
-// Implémenter l'endpoint Ajax dans votre framework.
 class CaptchaEndpoint extends AbstractEndpoint
 {
     protected function sendJsonResponse(array $data): void
@@ -54,58 +56,57 @@ $endpoint = new CaptchaEndpoint($config);
 $endpoint->handle();
 ```
 
-### PHP — Validation au submit
+### PHP — Validation
 
 ```php
 use Gaitcha\Config;
 use Gaitcha\ValidationOrchestrator;
 
-$config       = new Config(['secret' => 'votre-cle-secrete']);
+$config       = new Config(['secret' => 'your-secret-key-at-least-32-characters']);
 $orchestrator = new ValidationOrchestrator($config);
 $result       = $orchestrator->validate($_POST);
 
 if ($result->isAccepted()) {
-    // Traiter le formulaire.
+    // Process the form.
 } else {
-    // Rejet : $result->getReason()
+    // $result->getReason():
     // token_absent | token_invalid | token_expired
     // token_already_used | score_insufficient | log_malformed
 }
 ```
 
-### HTML — Formulaire
-
-```html
-<form data-gaitcha data-gaitcha-endpoint="/captcha/init" method="POST" action="/submit">
-    <input type="text" name="name" required>
-    <input type="email" name="email" required>
-    <button type="submit">Envoyer</button>
-</form>
-
-<script src="gaitcha.min.js"></script>
-```
-
-### JS — Init manuelle
+### Manual JS init
 
 ```js
 Gaitcha.init(document.querySelector('#my-form'), '/captcha/init', {
-    label: 'Vérification humaine',
+    label: 'I am not a robot',
 });
 ```
 
+## How It Works
+
+1. The form loads normally — no captcha field
+2. On the first interaction signal (mousemove, touch, focus), an Ajax request fetches a signed token and a random field name
+3. A visible checkbox is injected into the form
+4. The JS collects interaction events (mouse moves, keyboard tabs, timing)
+5. On submit, the behavioral log is sent alongside the token
+6. The server verifies the token (signature + TTL) and scores the behavior across multiple signals
+
+The scoring engine detects three profiles (mouse, keyboard, touch) and uses whichever scores highest. Several "kill signals" cause immediate rejection: interaction too fast, no movement before click, pixel-perfect center click, no keyboard events before check.
+
 ## Configuration
 
-| Option | Type | Défaut | Description |
+| Option | Type | Default | Description |
 |---|---|---|---|
-| `secret` | string | **requis** | Clé secrète HMAC |
-| `ttl` | int | `120` | Durée de validité du token (secondes) |
-| `score_threshold` | float | `0.5` | Seuil minimum du score comportemental (0.0–1.0) |
-| `debug` | bool | `false` | Mode debug (détails de rejet dans la réponse) |
-| `no_js_fallback` | string | `'reject'` | `'reject'` ou `'allow'` sans JavaScript |
-| `token_field_name` | string | `'_ct'` | Nom du champ hidden du token |
-| `field_prefix` | string | `'_gc_'` | Préfixe des noms de champs générés |
-| `anti_replay` | bool | `false` | Anti-replay (nécessite un `token_store`) |
-| `token_store` | TokenStoreInterface | `null` | Store pour l'anti-replay |
+| `secret` | string | **required** | HMAC secret key (min 32 characters) |
+| `ttl` | int | `120` | Token validity duration (seconds) |
+| `score_threshold` | float | `0.5` | Minimum behavioral score (0.0–1.0) |
+| `debug` | bool | `false` | Include scoring details in the response |
+| `no_js_fallback` | string | `'reject'` | `'reject'` or `'allow'` when JS is disabled |
+| `token_field_name` | string | `'_ct'` | Hidden field name for the signed token |
+| `field_prefix` | string | `'_gc_'` | Prefix for generated field names |
+| `anti_replay` | bool | `false` | Reject reused tokens (requires a `token_store`) |
+| `token_store` | TokenStoreInterface | `null` | Storage backend for anti-replay |
 
 ### Anti-replay
 
@@ -114,56 +115,49 @@ use Gaitcha\Config;
 use Gaitcha\FileTokenStore;
 
 $config = new Config([
-    'secret'      => 'votre-cle-secrete',
-    'anti_replay' => true,
+    'secret'       => 'your-secret-key-at-least-32-characters',
+    'anti_replay'  => true,
     'token_store'  => new FileTokenStore('/tmp/gaitcha-tokens.json'),
 ]);
 ```
 
-## Attributs HTML
+`FileTokenStore` works for moderate traffic. For high-traffic sites, implement `TokenStoreInterface` with Redis or your database — the `checkAndAdd()` method must be atomic (e.g. `SETNX` for Redis, `INSERT ... ON CONFLICT` for SQL).
 
-| Attribut | Description |
+### HTML attributes
+
+| Attribute | Description |
 |---|---|
-| `data-gaitcha` | Active Gaitcha sur le formulaire |
-| `data-gaitcha-endpoint` | URL de l'endpoint init (défaut : `/captcha/init`) |
-| `data-gaitcha-label` | Label de la checkbox (défaut : "Je ne suis pas un robot") |
+| `data-gaitcha` | Enables Gaitcha on the form |
+| `data-gaitcha-endpoint` | Init endpoint URL (default: `/captcha/init`) |
+| `data-gaitcha-label` | Checkbox label (default: "Je ne suis pas un robot") |
 
-## Développement
+## Limits
+
+- Not bulletproof against targeted attacks with headed browsers and behavioral simulation — but that level of effort is better addressed by rate limiting
+- Requires JavaScript (configurable fallback for no-JS users)
+- Designed to stop mass spam, not to protect high-value targets
+
+## Development
 
 ```bash
-composer install
-npm install
+composer install && npm install
 
-# Tests PHP
+# PHP tests
 composer test
 
 # Build JS
 npm run build
 
-# Dev (watch + serveur PHP)
+# Dev (watch + PHP server)
 npm run dev &
 npm run serve
 # → http://localhost:8080
 ```
 
-## Scoring
+## Author
 
-Trois profils détectés automatiquement par le type de check (clic souris, touche clavier, touch). Si des données d'un autre profil existent (ex: mouvements souris + check clavier), les deux profils sont scorés et le meilleur est retenu.
+[Willy Bahuaud](https://wabeo.fr) — WordPress Architect
 
-**Souris (10 signaux)** — trajectoire, non-linéarité, offset du clic, variation de vitesse, angular jitter, direction reversals, endpoint deceleration, speed autocorrelation, CDP screen delta, coalesced events ratio
+## License
 
-**Clavier (9 signaux)** — séquence de tabs, variance timing, cohérence navigation, délai focus→check, dwell time variance, rollover rate, timing entropy, correction bonus, timing autocorrelation
-
-**Touch (7 signaux)** — similaire au profil souris, seuils adaptés au tactile
-
-Kill signals (score = 0 immédiat) : `dt` < 100ms, aucun mouvement avant clic, clic exactement au centre, aucun tab avant check clavier.
-
-## Limites
-
-- Pas infaillible contre un attaquant ciblé avec Playwright + simulation comportementale
-- Nécessite JavaScript (fallback configurable pour les utilisateurs sans JS)
-- Conçu pour le spam de masse, pas pour la protection de cibles haute valeur
-
-## Licence
-
-MIT
+GPL-2.0-or-later

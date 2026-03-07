@@ -2,7 +2,14 @@
     "name": "willybahuaud/gaitcha",
     "description": "Frictionless, self-hosted CAPTCHA combining behavioral analysis, random field names, and HMAC tokens.",
     "type": "library",
-    "license": "MIT",
+    "license": "GPL-2.0-or-later",
+    "authors": [
+        {
+            "name": "Willy Bahuaud",
+            "homepage": "https://wabeo.fr",
+            "role": "WordPress Architect"
+        }
+    ],
     "autoload": {
         "psr-4": {
             "Gaitcha\\": "src/php/"
