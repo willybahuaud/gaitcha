@@ -16,16 +16,18 @@ import { attachSubmitSerializer } from './LogSerializer.js';
  *
  * @param {HTMLFormElement} form     Formulaire à protéger.
  * @param {string}          endpoint URL de l'endpoint /captcha/init.
- * @param {object}          options  Options optionnelles.
- * @param {string}          options.label Label de la checkbox.
+ * @param {object}          options            Options optionnelles.
+ * @param {string}          options.label      Label de la checkbox.
+ * @param {HTMLElement}     options.container  Conteneur cible pour l'injection DOM.
  * @return {object} Instance avec destroy().
  */
 function initGaitchaForm(form, endpoint, options) {
     const label = (options && options.label) || 'Je ne suis pas un robot';
+    const targetContainer = (options && options.container) || null;
 
     const logger = createEventLogger(form);
     const fetcher = createAjaxFetcher(endpoint);
-    const injector = createDOMInjector(form);
+    const injector = createDOMInjector(form, targetContainer);
 
     let detectorCleanup = null;
     let serializerCleanup = null;

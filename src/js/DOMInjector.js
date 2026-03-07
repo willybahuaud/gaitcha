@@ -9,10 +9,11 @@
 /**
  * Crée un injecteur DOM pour un formulaire.
  *
- * @param {HTMLFormElement} form Formulaire cible.
+ * @param {HTMLFormElement}  form            Formulaire cible.
+ * @param {HTMLElement|null} targetContainer Conteneur cible optionnel pour l'injection.
  * @return {object} Injecteur avec inject(), update(), getCheckbox(), getLogInput(), destroy().
  */
-function createDOMInjector(form) {
+function createDOMInjector(form, targetContainer) {
     /** @type {HTMLDivElement|null} */
     let container = null;
 
@@ -67,16 +68,22 @@ function createDOMInjector(form) {
         logInput.name = fieldName + '_log';
         logInput.value = '';
 
-        // Injecter avant le premier bouton submit, ou à la fin du form.
-        const submitBtn = form.querySelector('[type="submit"], button:not([type])');
-        if (submitBtn) {
-            form.insertBefore(container, submitBtn);
-            form.insertBefore(tokenInput, submitBtn);
-            form.insertBefore(logInput, submitBtn);
+        // Injecter dans le conteneur cible, ou avant le bouton submit, ou à la fin du form.
+        if (targetContainer) {
+            targetContainer.appendChild(container);
+            targetContainer.appendChild(tokenInput);
+            targetContainer.appendChild(logInput);
         } else {
-            form.appendChild(container);
-            form.appendChild(tokenInput);
-            form.appendChild(logInput);
+            var submitBtn = form.querySelector('[type="submit"], button:not([type])');
+            if (submitBtn) {
+                form.insertBefore(container, submitBtn);
+                form.insertBefore(tokenInput, submitBtn);
+                form.insertBefore(logInput, submitBtn);
+            } else {
+                form.appendChild(container);
+                form.appendChild(tokenInput);
+                form.appendChild(logInput);
+            }
         }
     }
 

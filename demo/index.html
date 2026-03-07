@@ -105,10 +105,28 @@
 
 <div id="result2"></div>
 
+<h2>Formulaire 3 (container cible)</h2>
+<form id="form3" data-gaitcha data-gaitcha-endpoint="/captcha/init" data-gaitcha-container="gaitcha-slot" data-gaitcha-label="Prouvez que vous êtes humain" action="/submit" method="POST">
+    <label for="pseudo">Pseudo</label>
+    <input type="text" id="pseudo" name="pseudo" placeholder="MonPseudo" required>
+
+    <div id="gaitcha-slot" style="border: 2px dashed #93c5fd; border-radius: 4px; padding: 0.5rem; margin: 1rem 0;">
+        <!-- Gaitcha s'injecte ici via l'option container -->
+    </div>
+
+    <label for="comment">Commentaire</label>
+    <textarea id="comment" name="comment" placeholder="Votre commentaire…"></textarea>
+
+    <button type="submit">Publier</button>
+</form>
+
+<div id="result3"></div>
+
 <script src="/gaitcha.min.js"></script>
 <script>
     document.querySelectorAll('form').forEach(function setupForm(form) {
-        var resultId = form.id === 'form2' ? 'result2' : 'result';
+        var resultIds = { form1: 'result', form2: 'result2', form3: 'result3' };
+        var resultId = resultIds[form.id] || 'result';
 
         form.addEventListener('submit', function handleSubmit(e) {
             e.preventDefault();

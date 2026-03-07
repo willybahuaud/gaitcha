@@ -44,7 +44,9 @@ function isSameOrigin(url) {
  *
  * @param {HTMLFormElement} form     Formulaire à protéger.
  * @param {string}          endpoint URL de l'endpoint Ajax (doit être same-origin).
- * @param {object}          options  Options (label, etc.).
+ * @param {object}          options            Options optionnelles.
+ * @param {string}          options.label      Label de la checkbox.
+ * @param {HTMLElement}     options.container  Conteneur cible pour l'injection DOM.
  * @return {object|null} Instance avec destroy(), ou null si refusé.
  */
 function init(form, endpoint, options) {
@@ -86,8 +88,10 @@ function autoInit() {
     forms.forEach(function initForm(form) {
         var endpoint = form.getAttribute('data-gaitcha-endpoint') || '/captcha/init';
         var label = form.getAttribute('data-gaitcha-label') || undefined;
+        var containerId = form.getAttribute('data-gaitcha-container') || undefined;
+        var container = containerId ? document.getElementById(containerId) : undefined;
 
-        init(form, endpoint, { label: label });
+        init(form, endpoint, { label: label, container: container });
     });
 }
 

@@ -88,6 +88,7 @@ if ($result->isAccepted()) {
 ```js
 Gaitcha.init(document.querySelector('#my-form'), '/captcha/init', {
     label: 'I am not a robot',
+    container: document.getElementById('captcha-slot'), // optional target element
 });
 ```
 
@@ -138,6 +139,7 @@ $config = new Config([
 | `data-gaitcha` | Enables Gaitcha on the form |
 | `data-gaitcha-endpoint` | Init endpoint URL (default: `/captcha/init`) |
 | `data-gaitcha-label` | Checkbox label (default: "Je ne suis pas un robot") |
+| `data-gaitcha-container` | ID of a DOM element where the checkbox should be injected |
 
 ## Limits
 
