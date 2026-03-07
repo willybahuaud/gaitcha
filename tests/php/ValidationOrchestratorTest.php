@@ -13,7 +13,7 @@ use PHPUnit\Framework\TestCase;
 
 class ValidationOrchestratorTest extends TestCase
 {
-    private const SECRET = 'test-secret-key';
+    private const SECRET = 'test-secret-key-for-gaitcha-unit-tests!';
     private const NOW    = 1700000000;
 
     private Config $config;
@@ -31,7 +31,7 @@ class ValidationOrchestratorTest extends TestCase
 
     public function testAcceptsValidHumanSubmission(): void
     {
-        $fieldName = '_gc_test1234';
+        $fieldName = '_gc_aabb1234';
         $token     = $this->generator->generateToken($fieldName, self::NOW);
         $log       = $this->buildHumanMouseLog();
 
@@ -61,7 +61,7 @@ class ValidationOrchestratorTest extends TestCase
 
     public function testRejectsForgedToken(): void
     {
-        $post = ['_ct' => '_gc_test.1700000000.forgedsig'];
+        $post = ['_ct' => '_gc_abcd1234.1700000000.forgedsig'];
 
         $result = $this->orchestrator->validate($post, self::NOW);
 
@@ -73,7 +73,7 @@ class ValidationOrchestratorTest extends TestCase
 
     public function testRejectsExpiredToken(): void
     {
-        $token = $this->generator->generateToken('_gc_test', self::NOW);
+        $token = $this->generator->generateToken('_gc_ccdd5678', self::NOW);
         $post  = ['_ct' => $token];
 
         $result = $this->orchestrator->validate($post, self::NOW + 300);
@@ -86,7 +86,7 @@ class ValidationOrchestratorTest extends TestCase
 
     public function testRejectsWhenLogMissing(): void
     {
-        $fieldName = '_gc_test1234';
+        $fieldName = '_gc_aabb1234';
         $token     = $this->generator->generateToken($fieldName, self::NOW);
 
         $post = [
@@ -104,7 +104,7 @@ class ValidationOrchestratorTest extends TestCase
 
     public function testRejectsWhenLogIsMalformed(): void
     {
-        $fieldName = '_gc_test1234';
+        $fieldName = '_gc_aabb1234';
         $token     = $this->generator->generateToken($fieldName, self::NOW);
 
         $post = [
@@ -123,7 +123,7 @@ class ValidationOrchestratorTest extends TestCase
 
     public function testRejectsBotBehavior(): void
     {
-        $fieldName = '_gc_test1234';
+        $fieldName = '_gc_aabb1234';
         $token     = $this->generator->generateToken($fieldName, self::NOW);
 
         // Bot : aucun mouvement, clic au centre exact.
@@ -174,7 +174,7 @@ class ValidationOrchestratorTest extends TestCase
         $generator    = new TokenGenerator($config);
         $orchestrator = new ValidationOrchestrator($config);
 
-        $fieldName = '_gc_replay';
+        $fieldName = '_gc_eeff0011';
         $token     = $generator->generateToken($fieldName, self::NOW);
         $log       = $this->buildHumanMouseLog();
 
@@ -203,7 +203,7 @@ class ValidationOrchestratorTest extends TestCase
 
     public function testDebugModeIncludesDetails(): void
     {
-        $fieldName = '_gc_test1234';
+        $fieldName = '_gc_aabb1234';
         $token     = $this->generator->generateToken($fieldName, self::NOW);
         $log       = $this->buildHumanMouseLog();
 
@@ -225,7 +225,7 @@ class ValidationOrchestratorTest extends TestCase
         $generator    = new TokenGenerator($config);
         $orchestrator = new ValidationOrchestrator($config);
 
-        $fieldName = '_gc_test1234';
+        $fieldName = '_gc_aabb1234';
         $token     = $generator->generateToken($fieldName, self::NOW);
         $log       = $this->buildHumanMouseLog();
 
@@ -248,7 +248,7 @@ class ValidationOrchestratorTest extends TestCase
         $generator    = new TokenGenerator($config);
         $orchestrator = new ValidationOrchestrator($config);
 
-        $fieldName = '_gc_test1234';
+        $fieldName = '_gc_aabb1234';
         $token     = $generator->generateToken($fieldName, self::NOW);
         $log       = $this->buildHumanMouseLog();
 
@@ -272,26 +272,32 @@ class ValidationOrchestratorTest extends TestCase
     {
         return [
             'moves' => [
+                // Phase d'accélération — mouvements amples, rapides.
                 ['t' => 0,   'x' => 200, 'y' => 300],
-                ['t' => 55,  'x' => 210, 'y' => 295],
-                ['t' => 105, 'x' => 225, 'y' => 288],
-                ['t' => 170, 'x' => 240, 'y' => 284],
-                ['t' => 220, 'x' => 260, 'y' => 276],
-                ['t' => 300, 'x' => 275, 'y' => 270],
-                ['t' => 340, 'x' => 290, 'y' => 268],
-                ['t' => 410, 'x' => 298, 'y' => 265],
-                ['t' => 450, 'x' => 302, 'y' => 263],
-                ['t' => 520, 'x' => 305, 'y' => 261],
+                ['t' => 35,  'x' => 218, 'y' => 293],
+                ['t' => 70,  'x' => 240, 'y' => 284],
+                ['t' => 110, 'x' => 265, 'y' => 278],
+                // Légère déviation vers le haut (tremblement).
+                ['t' => 150, 'x' => 282, 'y' => 271],
+                ['t' => 185, 'x' => 296, 'y' => 268],
+                // Overshoot en X : dépasse la cible puis corrige.
+                ['t' => 225, 'x' => 312, 'y' => 263],
+                ['t' => 275, 'x' => 308, 'y' => 264],  // retour X
+                ['t' => 330, 'x' => 305, 'y' => 262],  // correction Y
+                // Phase de décélération — mouvements courts, plus lents.
+                ['t' => 400, 'x' => 306, 'y' => 261],
+                ['t' => 480, 'x' => 305, 'y' => 261],  // retour X fin
+                ['t' => 570, 'x' => 305, 'y' => 260],
             ],
             'check' => [
                 'type'   => 'click',
-                't'      => 550,
+                't'      => 620,
                 'x'      => 305,
-                'y'      => 261,
+                'y'      => 260,
                 'offset' => ['x' => 4, 'y' => -3],
             ],
             'tabs'  => [],
-            'dt'    => 550,
+            'dt'    => 620,
         ];
     }
 }

@@ -57,7 +57,7 @@ class BehavioralScorer
     }
 
     /**
-     * Scoring profil souris : trajectoire, non-linéarité, offset clic, variation vitesse.
+     * Scoring profil souris : 7 signaux dont 3 anti-Bézier.
      *
      * @param array $log Log parsé.
      * @return array{score: float, profile: string, details: array<string, float>}
@@ -82,27 +82,42 @@ class BehavioralScorer
             }
         }
 
-        // Signal 1 : trajectoire existe (poids 0.30).
+        // Signal 1 : trajectoire existe (poids 0.10).
         $moveCount              = count($moves);
         $trajectoryScore        = min(1.0, $moveCount / self::MIN_MOVES);
         $details['trajectory']  = $trajectoryScore;
 
-        // Signal 2 : non-linéarité (poids 0.25).
+        // Signal 2 : non-linéarité (poids 0.10).
         $nonLinearityScore          = $this->calculateNonLinearity($moves);
         $details['non_linearity']   = $nonLinearityScore;
 
-        // Signal 3 : offset du clic (poids 0.25).
+        // Signal 3 : offset du clic (poids 0.10).
         $offsetScore          = $this->calculateClickOffset($check);
         $details['offset']    = $offsetScore;
 
-        // Signal 4 : variation de vitesse (poids 0.20).
-        $speedVariationScore      = $this->calculateSpeedVariation($moves);
+        // Signal 4 : variation de vitesse (poids 0.10).
+        $speedVariationScore        = $this->calculateSpeedVariation($moves);
         $details['speed_variation'] = $speedVariationScore;
 
-        $score = ($trajectoryScore * 0.30)
-               + ($nonLinearityScore * 0.25)
-               + ($offsetScore * 0.25)
-               + ($speedVariationScore * 0.20);
+        // Signal 5 : angular jitter — irrégularité des changements de direction (poids 0.20).
+        $angularJitterScore        = $this->calculateAngularJitter($moves);
+        $details['angular_jitter'] = $angularJitterScore;
+
+        // Signal 6 : direction reversals — micro-corrections de trajectoire (poids 0.15).
+        $directionReversalsScore        = $this->calculateDirectionReversals($moves);
+        $details['direction_reversals'] = $directionReversalsScore;
+
+        // Signal 7 : endpoint deceleration — décélération naturelle en fin de trajectoire (poids 0.15).
+        $endpointDecelerationScore        = $this->calculateEndpointDeceleration($moves);
+        $details['endpoint_deceleration'] = $endpointDecelerationScore;
+
+        $score = ($trajectoryScore * 0.10)
+               + ($nonLinearityScore * 0.10)
+               + ($offsetScore * 0.10)
+               + ($speedVariationScore * 0.10)
+               + ($angularJitterScore * 0.20)
+               + ($directionReversalsScore * 0.15)
+               + ($endpointDecelerationScore * 0.15);
 
         return $this->result($score, 'mouse', $details);
     }
@@ -151,7 +166,7 @@ class BehavioralScorer
     }
 
     /**
-     * Scoring profil touch : similaire au mouse avec buffer plus court.
+     * Scoring profil touch : similaire au mouse avec buffer plus court, 7 signaux.
      *
      * @param array $log Log parsé.
      * @return array{score: float, profile: string, details: array<string, float>}
@@ -174,27 +189,43 @@ class BehavioralScorer
         // Le touch est plus court, moins de mouvements attendus.
         $minTouchMoves = 3;
 
-        // Signal 1 : trajectoire existe (poids 0.30).
+        // Signal 1 : trajectoire existe (poids 0.10).
         $moveCount             = count($moves);
         $trajectoryScore       = min(1.0, $moveCount / $minTouchMoves);
         $details['trajectory'] = $trajectoryScore;
 
-        // Signal 2 : non-linéarité (poids 0.25).
+        // Signal 2 : non-linéarité (poids 0.10).
         $nonLinearityScore        = count($moves) >= 2 ? $this->calculateNonLinearity($moves) : 0.5;
         $details['non_linearity'] = $nonLinearityScore;
 
-        // Signal 3 : offset du touch (poids 0.25).
+        // Signal 3 : offset du touch (poids 0.10).
         $offsetScore       = $this->calculateClickOffset($check);
         $details['offset'] = $offsetScore;
 
-        // Signal 4 : variation de vitesse (poids 0.20).
+        // Signal 4 : variation de vitesse (poids 0.10).
         $speedVariationScore        = count($moves) >= 2 ? $this->calculateSpeedVariation($moves) : 0.5;
         $details['speed_variation'] = $speedVariationScore;
 
-        $score = ($trajectoryScore * 0.30)
-               + ($nonLinearityScore * 0.25)
-               + ($offsetScore * 0.25)
-               + ($speedVariationScore * 0.20);
+        // Signal 5 : angular jitter (poids 0.20).
+        // Besoin d'au moins 4 points pour 2+ angles exploitables.
+        $angularJitterScore        = count($moves) >= 4 ? $this->calculateAngularJitter($moves) : 0.5;
+        $details['angular_jitter'] = $angularJitterScore;
+
+        // Signal 6 : direction reversals (poids 0.15).
+        $directionReversalsScore        = count($moves) >= 4 ? $this->calculateDirectionReversals($moves) : 0.5;
+        $details['direction_reversals'] = $directionReversalsScore;
+
+        // Signal 7 : endpoint deceleration (poids 0.15).
+        $endpointDecelerationScore        = count($moves) >= 6 ? $this->calculateEndpointDeceleration($moves) : 0.5;
+        $details['endpoint_deceleration'] = $endpointDecelerationScore;
+
+        $score = ($trajectoryScore * 0.10)
+               + ($nonLinearityScore * 0.10)
+               + ($offsetScore * 0.10)
+               + ($speedVariationScore * 0.10)
+               + ($angularJitterScore * 0.20)
+               + ($directionReversalsScore * 0.15)
+               + ($endpointDecelerationScore * 0.15);
 
         return $this->result($score, 'touch', $details);
     }
@@ -373,6 +404,179 @@ class BehavioralScorer
 
         // Zone optimale : 50-2000ms.
         return 1.0;
+    }
+
+    /**
+     * Mesure l'irrégularité des changements de direction (angular jitter).
+     *
+     * Une courbe de Bézier produit des angles très réguliers entre segments.
+     * Un humain produit des tremblements → angles irréguliers → CV élevé.
+     *
+     * @param array<int, array{x: int|float, y: int|float}> $moves Points de la trajectoire.
+     * @return float Score de 0.0 à 1.0.
+     */
+    private function calculateAngularJitter(array $moves): float
+    {
+        if (count($moves) < 3) {
+            return 0.0;
+        }
+
+        $angles = [];
+        for ($i = 1; $i < count($moves) - 1; $i++) {
+            // Vecteur entrant (P[i-1] → P[i]).
+            $dx1 = (float) $moves[$i]['x'] - (float) $moves[$i - 1]['x'];
+            $dy1 = (float) $moves[$i]['y'] - (float) $moves[$i - 1]['y'];
+
+            // Vecteur sortant (P[i] → P[i+1]).
+            $dx2 = (float) $moves[$i + 1]['x'] - (float) $moves[$i]['x'];
+            $dy2 = (float) $moves[$i + 1]['y'] - (float) $moves[$i]['y'];
+
+            // Angle entre les deux vecteurs via atan2.
+            $angle1 = atan2($dy1, $dx1);
+            $angle2 = atan2($dy2, $dx2);
+
+            $delta = abs($angle2 - $angle1);
+            // Normalise dans [0, π].
+            if ($delta > M_PI) {
+                $delta = 2 * M_PI - $delta;
+            }
+
+            $angles[] = $delta;
+        }
+
+        if (count($angles) < 2) {
+            return 0.0;
+        }
+
+        $mean = array_sum($angles) / count($angles);
+
+        // Moyenne nulle = tous les segments sont colinéaires.
+        if ($mean < 0.001) {
+            return 0.0;
+        }
+
+        $stddev = $this->standardDeviation($angles, $mean);
+        $cv     = $stddev / $mean;
+
+        // CV / 0.8, plafonné à 1.0.
+        return min(1.0, $cv / 0.8);
+    }
+
+    /**
+     * Compte les inversions de direction en X et Y.
+     *
+     * Une trajectoire de Bézier est monotone (ou quasi-monotone).
+     * Un humain fait des micro-corrections : overshoot puis retour.
+     *
+     * @param array<int, array{x: int|float, y: int|float}> $moves Points de la trajectoire.
+     * @return float Score de 0.0 à 1.0.
+     */
+    private function calculateDirectionReversals(array $moves): float
+    {
+        if (count($moves) < 3) {
+            return 0.0;
+        }
+
+        $reversals    = 0;
+        $maxPossible  = 0;
+
+        for ($i = 1; $i < count($moves) - 1; $i++) {
+            $dx1 = (float) $moves[$i]['x'] - (float) $moves[$i - 1]['x'];
+            $dx2 = (float) $moves[$i + 1]['x'] - (float) $moves[$i]['x'];
+            $dy1 = (float) $moves[$i]['y'] - (float) $moves[$i - 1]['y'];
+            $dy2 = (float) $moves[$i + 1]['y'] - (float) $moves[$i]['y'];
+
+            // Inversion en X.
+            if ($dx1 * $dx2 < 0) {
+                $reversals++;
+            }
+            // Inversion en Y.
+            if ($dy1 * $dy2 < 0) {
+                $reversals++;
+            }
+
+            // 2 axes possibles par triplet.
+            $maxPossible += 2;
+        }
+
+        if ($maxPossible === 0) {
+            return 0.0;
+        }
+
+        $ratio = $reversals / $maxPossible;
+
+        // ratio / 0.15, plafonné à 1.0.
+        return min(1.0, $ratio / 0.15);
+    }
+
+    /**
+     * Vérifie la décélération en fin de trajectoire (loi de Fitts).
+     *
+     * Un humain décélère naturellement en approchant la cible.
+     * Un bot avec random delay n'a pas ce pattern.
+     *
+     * @param array<int, array{t: int|float, x: int|float, y: int|float}> $moves Points.
+     * @return float Score de 0.0 à 1.0.
+     */
+    private function calculateEndpointDeceleration(array $moves): float
+    {
+        if (count($moves) < 6) {
+            return 0.0;
+        }
+
+        $count  = count($moves);
+        $speeds = [];
+
+        for ($i = 1; $i < $count; $i++) {
+            $dx = (float) $moves[$i]['x'] - (float) $moves[$i - 1]['x'];
+            $dy = (float) $moves[$i]['y'] - (float) $moves[$i - 1]['y'];
+            $dt = (float) $moves[$i]['t'] - (float) $moves[$i - 1]['t'];
+
+            if ($dt <= 0) {
+                continue;
+            }
+
+            $speeds[] = sqrt($dx * $dx + $dy * $dy) / $dt;
+        }
+
+        if (count($speeds) < 3) {
+            return 0.0;
+        }
+
+        $speedCount = count($speeds);
+
+        // Divise en 3 tiers.
+        $midStart = (int) floor($speedCount * 0.3);
+        $endStart = (int) floor($speedCount * 0.7);
+
+        $midSpeeds = array_slice($speeds, $midStart, $endStart - $midStart);
+        $endSpeeds = array_slice($speeds, $endStart);
+
+        if (empty($midSpeeds) || empty($endSpeeds)) {
+            return 0.0;
+        }
+
+        $midAvg = array_sum($midSpeeds) / count($midSpeeds);
+        $endAvg = array_sum($endSpeeds) / count($endSpeeds);
+
+        // Évite la division par zéro.
+        if ($midAvg < 0.001) {
+            return 0.0;
+        }
+
+        $ratio = $endAvg / $midAvg;
+
+        // ratio < 0.8 = forte décélération → score max.
+        // ratio > 1.2 = pas de décélération → score 0.
+        if ($ratio <= 0.8) {
+            return 1.0;
+        }
+        if ($ratio >= 1.2) {
+            return 0.0;
+        }
+
+        // Interpolation linéaire entre 0.8 et 1.2.
+        return 1.0 - (($ratio - 0.8) / 0.4);
     }
 
     /**

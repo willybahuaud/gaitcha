@@ -94,6 +94,34 @@ class BehavioralScorerTest extends TestCase
 
     // --- Profil souris : scores faibles (bot) ---
 
+    public function testBezierBotScoresLow(): void
+    {
+        // Trajectoire de Bézier quadratique : P0(100,300) P1(250,200) P2(400,280).
+        // 15 points réguliers, pas de jitter, pas de reversals, pas de décélération.
+        $moves = [];
+        $steps = 15;
+        for ($i = 0; $i <= $steps; $i++) {
+            $t  = $i / $steps;
+            $x  = (1 - $t) * (1 - $t) * 100 + 2 * (1 - $t) * $t * 250 + $t * $t * 400;
+            $y  = (1 - $t) * (1 - $t) * 300 + 2 * (1 - $t) * $t * 200 + $t * $t * 280;
+            // Délai aléatoire simulé (20-55ms entre chaque point).
+            $ms = $i * 38;
+            $moves[] = ['t' => $ms, 'x' => round($x, 1), 'y' => round($y, 1)];
+        }
+
+        $log = [
+            'moves' => $moves,
+            'check' => ['type' => 'click', 't' => 620, 'offset' => ['x' => 5, 'y' => -2]],
+            'tabs'  => [],
+            'dt'    => 620,
+        ];
+
+        $result = $this->scorer->score($log);
+
+        $this->assertLessThan(0.5, $result['score'], 'Un bot Bezier doit scorer < 0.5');
+        $this->assertSame('mouse', $result['profile']);
+    }
+
     public function testBotLinearTrajectoryScoresLow(): void
     {
         // Trajectoire parfaitement linéaire, vitesse constante.
@@ -201,7 +229,8 @@ class BehavioralScorerTest extends TestCase
     /**
      * Construit un log d'interaction souris humain réaliste.
      *
-     * Trajectoire non-linéaire, vitesse variable, offset du clic non nul.
+     * Inclut micro-corrections (overshoot en X puis retour), décélération
+     * dans le dernier tiers, et angles irréguliers entre segments.
      *
      * @return array Log structuré.
      */
@@ -209,26 +238,32 @@ class BehavioralScorerTest extends TestCase
     {
         return [
             'moves' => [
+                // Phase d'accélération — mouvements amples, rapides.
                 ['t' => 0,   'x' => 200, 'y' => 300],
-                ['t' => 55,  'x' => 210, 'y' => 295],
-                ['t' => 105, 'x' => 225, 'y' => 288],
-                ['t' => 170, 'x' => 240, 'y' => 284],
-                ['t' => 220, 'x' => 260, 'y' => 276],
-                ['t' => 300, 'x' => 275, 'y' => 270],
-                ['t' => 340, 'x' => 290, 'y' => 268],
-                ['t' => 410, 'x' => 298, 'y' => 265],
-                ['t' => 450, 'x' => 302, 'y' => 263],
-                ['t' => 520, 'x' => 305, 'y' => 261],
+                ['t' => 35,  'x' => 218, 'y' => 293],
+                ['t' => 70,  'x' => 240, 'y' => 284],
+                ['t' => 110, 'x' => 265, 'y' => 278],
+                // Légère déviation vers le haut (tremblement).
+                ['t' => 150, 'x' => 282, 'y' => 271],
+                ['t' => 185, 'x' => 296, 'y' => 268],
+                // Overshoot en X : dépasse la cible puis corrige.
+                ['t' => 225, 'x' => 312, 'y' => 263],
+                ['t' => 275, 'x' => 308, 'y' => 264],  // retour X
+                ['t' => 330, 'x' => 305, 'y' => 262],  // correction Y
+                // Phase de décélération — mouvements courts, plus lents.
+                ['t' => 400, 'x' => 306, 'y' => 261],
+                ['t' => 480, 'x' => 305, 'y' => 261],  // retour X fin
+                ['t' => 570, 'x' => 305, 'y' => 260],
             ],
             'check' => [
                 'type'   => 'click',
-                't'      => 550,
+                't'      => 620,
                 'x'      => 305,
-                'y'      => 261,
+                'y'      => 260,
                 'offset' => ['x' => 4, 'y' => -3],
             ],
             'tabs'  => [],
-            'dt'    => 550,
+            'dt'    => 620,
         ];
     }
 }
