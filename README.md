@@ -89,6 +89,11 @@ if ($result->isAccepted()) {
 Gaitcha.init(document.querySelector('#my-form'), '/captcha/init', {
     label: 'I am not a robot',
     container: document.getElementById('captcha-slot'), // optional target element
+    classes: { // optional CSS class overrides
+        field: 'my-captcha-wrapper',
+        checkbox: 'my-checkbox',
+        label: 'my-label',
+    },
 });
 ```
 

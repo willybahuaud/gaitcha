@@ -11,9 +11,16 @@
  *
  * @param {HTMLFormElement}  form            Formulaire cible.
  * @param {HTMLElement|null} targetContainer Conteneur cible optionnel pour l'injection.
+ * @param {object}           cssClasses     Classes CSS personnalisées.
+ * @param {string}           cssClasses.field    Classe du wrapper div (defaut: 'gaitcha-field').
+ * @param {string}           cssClasses.checkbox Classe du checkbox (defaut: 'gaitcha-checkbox').
+ * @param {string}           cssClasses.label    Classe du label (defaut: 'gaitcha-label').
  * @return {object} Injecteur avec inject(), update(), getCheckbox(), getLogInput(), destroy().
  */
-function createDOMInjector(form, targetContainer) {
+function createDOMInjector(form, targetContainer, cssClasses) {
+    var fieldClass = (cssClasses && cssClasses.field) || 'gaitcha-field';
+    var checkboxClass = (cssClasses && cssClasses.checkbox) || 'gaitcha-checkbox';
+    var labelClass = (cssClasses && cssClasses.label) || 'gaitcha-label';
     /** @type {HTMLDivElement|null} */
     let container = null;
 
@@ -37,7 +44,7 @@ function createDOMInjector(form, targetContainer) {
     function inject(fieldName, token, tokenFieldName, label) {
         // Container pour la checkbox + label.
         container = document.createElement('div');
-        container.className = 'gaitcha-field';
+        container.className = fieldClass;
 
         // Checkbox visible.
         checkbox = document.createElement('input');
@@ -45,13 +52,13 @@ function createDOMInjector(form, targetContainer) {
         checkbox.name = fieldName;
         checkbox.id = 'gaitcha-' + fieldName;
         checkbox.required = true;
-        checkbox.className = 'gaitcha-checkbox';
+        checkbox.className = checkboxClass;
 
         // Label.
         const labelEl = document.createElement('label');
         labelEl.htmlFor = checkbox.id;
         labelEl.textContent = label || 'Je ne suis pas un robot';
-        labelEl.className = 'gaitcha-label';
+        labelEl.className = labelClass;
 
         container.appendChild(checkbox);
         container.appendChild(labelEl);

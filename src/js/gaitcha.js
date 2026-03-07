@@ -47,6 +47,7 @@ function isSameOrigin(url) {
  * @param {object}          options            Options optionnelles.
  * @param {string}          options.label      Label de la checkbox.
  * @param {HTMLElement}     options.container  Conteneur cible pour l'injection DOM.
+ * @param {object}          options.classes    Classes CSS personnalisées (field, checkbox, label).
  * @return {object|null} Instance avec destroy(), ou null si refusé.
  */
 function init(form, endpoint, options) {
