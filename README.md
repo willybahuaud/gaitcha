@@ -13,7 +13,7 @@ Gaitcha takes a different approach: it watches **how** the user reaches and chec
 ### Install
 
 ```bash
-composer require willybahuaud/gaitcha
+composer require wabeo/gaitcha
 ```
 
 Then build the JS client:
