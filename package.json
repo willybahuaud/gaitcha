@@ -6,7 +6,7 @@
     "scripts": {
         "build": "node esbuild.config.mjs",
         "dev": "node esbuild.config.mjs --watch",
-        "serve": "php -S localhost:8080 -t dev dev/server.php"
+        "serve": "php -S localhost:8080 -t demo demo/server.php"
     },
     "devDependencies": {
         "esbuild": "^0.24.0"

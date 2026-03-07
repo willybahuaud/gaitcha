@@ -57,7 +57,7 @@ vendor/bin/phpunit --filter testHumanMouseInteractionScoresHigh
 - **DOMInjector** — injecte checkbox visible + label + hidden fields (_ct, _log)
 - **LogSerializer** — sérialise le payload au submit
 
-### Dev — `dev/`
+### Demo — `demo/`
 
 - **server.php** — router PHP avec `/captcha/init` et `/submit`
 - **index.html** — page test avec 2 formulaires
@@ -94,7 +94,3 @@ mais un profil secondaire est scoré si des données existent. Score final = max
 - Nommage explicite, fichiers courts, une responsabilité par fichier
 - Commenter le pourquoi, pas le quoi
 
-## Specs de référence
-
-- `captcha-specs.md` — spécifications fonctionnelles (F1-F8), contraintes, edge cases, todo
-- `captcha-maison.md` — logique détaillée, modèle de menace, flux complet

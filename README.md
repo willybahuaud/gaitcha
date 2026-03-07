@@ -16,6 +16,14 @@ Gaitcha takes a different approach: it watches **how** the user reaches and chec
 composer require willybahuaud/gaitcha
 ```
 
+Then build the JS client:
+
+```bash
+npm install && npm run build
+```
+
+This generates `dist/gaitcha.min.js` — copy it to your public assets directory and include it in your HTML.
+
 ### HTML
 
 ```html
@@ -145,10 +153,10 @@ composer install && npm install
 # PHP tests
 composer test
 
-# Build JS
+# Build JS (→ dist/gaitcha.min.js)
 npm run build
 
-# Dev (watch + PHP server)
+# Demo (watch + PHP server)
 npm run dev &
 npm run serve
 # → http://localhost:8080
