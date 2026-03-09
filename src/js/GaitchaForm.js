@@ -19,7 +19,7 @@ import { attachSubmitSerializer } from './LogSerializer.js';
  * @param {object}          options            Options optionnelles.
  * @param {string}          options.label      Label de la checkbox.
  * @param {HTMLElement}     options.container  Conteneur cible pour l'injection DOM.
- * @return {object} Instance avec destroy().
+ * @return {object} Instance avec destroy() et reset().
  */
 function initGaitchaForm(form, endpoint, options) {
     const label = (options && options.label) || 'Je ne suis pas un robot';
@@ -47,8 +47,19 @@ function initGaitchaForm(form, endpoint, options) {
                 logger.start();
 
                 // Enregistrer le check via le callback du widget.
+                // Passer le widget visible (pas le checkbox caché 0×0px)
+                // pour un calcul d'offset pertinent.
                 injector.onCheck(function handleCheck(event) {
-                    logger.recordCheck(injector.getCheckbox(), event);
+                    logger.recordCheck(injector.getWidget(), event);
+
+                    // Sérialiser le log immédiatement — le logger est frozen,
+                    // le payload ne changera plus. Nécessaire pour les plugins
+                    // qui soumettent via AJAX sans déclencher form.submit()
+                    // (Ninja Forms, etc.).
+                    var logInput = injector.getLogInput();
+                    if (logInput) {
+                        logInput.value = JSON.stringify(logger.getPayload());
+                    }
                 });
 
                 // Sérialiser le log au submit.
@@ -73,6 +84,28 @@ function initGaitchaForm(form, endpoint, options) {
     detectorCleanup = listenForFirstInteraction(form, handleFirstInteraction);
 
     /**
+     * Remet le captcha en état initial pour un nouveau cycle.
+     *
+     * Décoche le widget, vide le log comportemental, et demande
+     * un nouveau token au serveur. Appelé après un rejet serveur
+     * pour permettre à l'utilisateur de réessayer.
+     */
+    function reset() {
+        injector.reset();
+        logger.reset();
+
+        // Demander un nouveau token et mettre à jour les champs.
+        fetcher.fetch()
+            .then(function onResetFetchSuccess(data) {
+                injector.update(data.field_name, data.token, data.token_field_name);
+            })
+            .catch(function onResetFetchError() {
+                // eslint-disable-next-line no-console
+                console.warn('Gaitcha: token refresh after reset failed.');
+            });
+    }
+
+    /**
      * Nettoie toutes les ressources.
      */
     function destroy() {
@@ -89,6 +122,7 @@ function initGaitchaForm(form, endpoint, options) {
 
     return {
         destroy: destroy,
+        reset: reset,
     };
 }
 

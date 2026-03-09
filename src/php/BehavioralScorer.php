@@ -657,13 +657,17 @@ class BehavioralScorer
 
         $ratio = $endAvg / $midAvg;
 
-        // ratio < 0.8 = forte décélération → score max.
-        // ratio > 1.2 = pas de décélération → score 0.
+        // ratio < 0.8 = forte décélération (Fitts' law) → score max.
+        // ratio 0.8–1.2 = interpolation linéaire.
+        // ratio > 1.2 = pas de décélération claire → neutre (0.5).
+        // Note : les données montrent que les vrais humains n'ont pas
+        // toujours une décélération mesurable avec un throttle 50ms +
+        // buffer circulaire. Pénaliser à 0.0 cause des faux positifs.
         if ($ratio <= 0.8) {
             return 1.0;
         }
         if ($ratio >= 1.2) {
-            return 0.0;
+            return 0.5;
         }
 
         // Interpolation linéaire entre 0.8 et 1.2.
