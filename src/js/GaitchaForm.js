@@ -19,17 +19,16 @@ import { attachSubmitSerializer } from './LogSerializer.js';
  * @param {object}          options            Options optionnelles.
  * @param {string}          options.label      Label de la checkbox.
  * @param {HTMLElement}     options.container  Conteneur cible pour l'injection DOM.
- * @param {object}          options.classes    Classes CSS personnalisées (field, checkbox, label).
  * @return {object} Instance avec destroy().
  */
 function initGaitchaForm(form, endpoint, options) {
     const label = (options && options.label) || 'Je ne suis pas un robot';
     const targetContainer = (options && options.container) || null;
-    const cssClasses = (options && options.classes) || null;
+    const theme = (options && options.theme) || 'light';
 
     const logger = createEventLogger(form);
     const fetcher = createAjaxFetcher(endpoint);
-    const injector = createDOMInjector(form, targetContainer, cssClasses);
+    const injector = createDOMInjector(form, targetContainer, theme);
 
     let detectorCleanup = null;
     let serializerCleanup = null;
@@ -47,11 +46,10 @@ function initGaitchaForm(form, endpoint, options) {
                 // Démarrer la collecte d'événements.
                 logger.start();
 
-                // Écouter le check de la checkbox.
-                const checkbox = injector.getCheckbox();
-                if (checkbox) {
-                    attachCheckboxListeners(checkbox);
-                }
+                // Enregistrer le check via le callback du widget.
+                injector.onCheck(function handleCheck(event) {
+                    logger.recordCheck(injector.getCheckbox(), event);
+                });
 
                 // Sérialiser le log au submit.
                 serializerCleanup = attachSubmitSerializer(
@@ -69,59 +67,6 @@ function initGaitchaForm(form, endpoint, options) {
                 // eslint-disable-next-line no-console
                 console.warn('Gaitcha: initialization failed.');
             });
-    }
-
-    /**
-     * Attache les listeners de check sur la checkbox.
-     *
-     * @param {HTMLInputElement} checkbox Checkbox Gaitcha.
-     */
-    function attachCheckboxListeners(checkbox) {
-        /**
-         * Handler de clic sur la checkbox.
-         *
-         * @param {MouseEvent} event Événement click.
-         */
-        function handleClick(event) {
-            if (event.isTrusted === false) {
-                return;
-            }
-            if (checkbox.checked) {
-                logger.recordCheck(checkbox, event);
-            }
-        }
-
-        /**
-         * Handler de touch sur la checkbox.
-         *
-         * @param {TouchEvent} event Événement touchend.
-         */
-        function handleTouchEnd(event) {
-            if (event.isTrusted === false) {
-                return;
-            }
-            if (checkbox.checked) {
-                logger.recordCheck(checkbox, event);
-            }
-        }
-
-        /**
-         * Handler clavier : espace ou entrée coche la checkbox.
-         *
-         * @param {KeyboardEvent} event Événement keydown.
-         */
-        function handleKeyDown(event) {
-            if (event.isTrusted === false) {
-                return;
-            }
-            if ((event.key === ' ' || event.key === 'Enter') && checkbox.checked) {
-                logger.recordCheck(checkbox, event);
-            }
-        }
-
-        checkbox.addEventListener('click', handleClick);
-        checkbox.addEventListener('touchend', handleTouchEnd);
-        checkbox.addEventListener('keydown', handleKeyDown);
     }
 
     // Démarrer la détection du premier signal.
