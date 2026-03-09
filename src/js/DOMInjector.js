@@ -742,11 +742,19 @@ function createDOMInjector(form, targetContainer, theme) {
         state = 'idle';
     }
 
+    /**
+     * @return {HTMLDivElement|null} Le widget visible (pour le calcul d'offset).
+     */
+    function getWidget() {
+        return widget;
+    }
+
     return {
         inject: inject,
         update: update,
         reset: reset,
         getCheckbox: getCheckbox,
+        getWidget: getWidget,
         getLogInput: getLogInput,
         onCheck: onCheck,
         destroy: destroy,

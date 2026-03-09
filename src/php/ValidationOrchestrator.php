@@ -7,7 +7,12 @@ namespace Gaitcha;
 /**
  * Orchestre la validation complète d'une soumission Gaitcha.
  *
- * Séquence : token présent → signature + TTL → anti-replay → parse log → scoring → résultat.
+ * Séquence : token présent → signature + TTL → parse log → scoring → anti-replay → résultat.
+ *
+ * L'anti-replay est volontairement placé APRÈS le scoring pour ne
+ * consommer le token que si la soumission est acceptée. Sinon, un
+ * rejet par scoring (faux positif) grille le token et empêche
+ * l'utilisateur de réessayer sur les formulaires AJAX.
  */
 class ValidationOrchestrator
 {
@@ -61,7 +66,8 @@ class ValidationOrchestrator
 
         $fieldName = $tokenResult['field_name'];
 
-        // 3. Anti-replay optionnel.
+        // 3. Anti-replay : vérifier d'abord si le token a déjà été utilisé
+        // (reject immédiat) mais ne PAS le consommer maintenant.
         if ($this->config->isAntiReplay()) {
             $store     = $this->config->getTokenStore();
             $tokenHash = hash('sha256', $post[$tokenFieldName]);
@@ -69,8 +75,7 @@ class ValidationOrchestrator
 
             $store->purge($this->config->getTtl(), $currentTime);
 
-            // Opération atomique check-and-set — garanti par le contrat de l'interface.
-            if ($store->checkAndAdd($tokenHash, $now)) {
+            if ($store->has($tokenHash)) {
                 return $this->reject(ValidationResult::REASON_TOKEN_ALREADY_USED, 0.0, $debug);
             }
         }
@@ -98,6 +103,13 @@ class ValidationOrchestrator
         // 6. Comparer au seuil.
         if ($score < $this->config->getScoreThreshold()) {
             return $this->reject(ValidationResult::REASON_SCORE_INSUFFICIENT, $score, $debug);
+        }
+
+        // 7. Anti-replay : consommer le token uniquement si tout est accepté.
+        // Évite de griller le token quand un rejet par scoring empêche
+        // l'utilisateur de réessayer (formulaires AJAX sans rechargement).
+        if ($this->config->isAntiReplay()) {
+            $store->add($tokenHash, $now);
         }
 
         return $this->accept($score, $debug);
