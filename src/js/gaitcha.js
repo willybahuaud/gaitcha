@@ -70,6 +70,25 @@ function init(form, endpoint, options) {
 }
 
 /**
+ * Remet le captcha d'un formulaire en état initial.
+ *
+ * Décoche le widget, vide le log comportemental, et demande
+ * un nouveau token. Utile après un rejet serveur en AJAX.
+ *
+ * @param {HTMLFormElement} form Formulaire à réinitialiser.
+ * @return {boolean} True si l'instance a été trouvée et réinitialisée.
+ */
+function reset(form) {
+    for (var i = 0; i < instances.length; i++) {
+        if (instances[i].form === form) {
+            instances[i].instance.reset();
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
  * Détruit toutes les instances Gaitcha.
  */
 function destroyAll() {
@@ -105,4 +124,4 @@ if (typeof document !== 'undefined') {
     }
 }
 
-export { init, destroyAll };
+export { init, reset, destroyAll };

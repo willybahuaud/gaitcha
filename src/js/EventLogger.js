@@ -17,7 +17,7 @@ const THROTTLE_MS = 50;
  * Crée un logger d'événements pour un formulaire.
  *
  * @param {HTMLFormElement} form Formulaire surveillé.
- * @return {object} Logger avec start(), freeze(), recordCheck(), getPayload(), destroy().
+ * @return {object} Logger avec start(), freeze(), reset(), recordCheck(), getPayload(), destroy().
  */
 function createEventLogger(form) {
     /** @type {Array<{t: number, x: number, y: number}>} */
@@ -333,6 +333,25 @@ function createEventLogger(form) {
     }
 
     /**
+     * Remet le logger a zero sans supprimer les listeners.
+     *
+     * Vide toutes les donnees collectees et degele le logger
+     * pour permettre un nouveau cycle de collecte.
+     */
+    function reset() {
+        moves = [];
+        tabs = [];
+        activeKeys = new Map();
+        checkEvent = null;
+        firstEventTime = 0;
+        lastMoveTime = 0;
+        totalMoveCount = 0;
+        coalescedTotal = 0;
+        coalescedMoveCount = 0;
+        frozen = false;
+    }
+
+    /**
      * Nettoie tous les listeners.
      */
     function destroy() {
@@ -343,6 +362,7 @@ function createEventLogger(form) {
     return {
         start: start,
         freeze: freeze,
+        reset: reset,
         recordCheck: recordCheck,
         getPayload: getPayload,
         destroy: destroy,

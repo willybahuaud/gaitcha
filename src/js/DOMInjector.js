@@ -391,7 +391,7 @@ function createShieldSVG() {
  * @param {HTMLFormElement}  form            Formulaire cible.
  * @param {HTMLElement|null} targetContainer Conteneur cible optionnel pour l'injection.
  * @param {string}          theme           Theme du widget : 'light' (defaut), 'dark', ou 'auto'.
- * @return {object} Injecteur avec inject(), update(), getCheckbox(), getLogInput(), onCheck(), destroy().
+ * @return {object} Injecteur avec inject(), update(), reset(), getCheckbox(), getLogInput(), onCheck(), destroy().
  */
 function createDOMInjector(form, targetContainer, theme) {
     /** @type {HTMLDivElement|null} */
@@ -647,6 +647,36 @@ function createDOMInjector(form, targetContainer, theme) {
     }
 
     /**
+     * Remet le widget en etat idle (decoche, pret pour un nouveau cycle).
+     *
+     * Utilise apres un rejet serveur pour permettre a l'utilisateur de reessayer.
+     */
+    function reset() {
+        if (loadingTimer) {
+            clearTimeout(loadingTimer);
+            loadingTimer = null;
+        }
+
+        state = 'idle';
+
+        if (widget) {
+            widget.classList.remove('gaitcha-widget--loading');
+            widget.classList.remove('gaitcha-widget--checked');
+            widget.setAttribute('aria-checked', 'false');
+
+            // Supprimer les ripples residuels.
+            var ripples = widget.querySelectorAll('.gaitcha-widget__ripple');
+            for (var i = 0; i < ripples.length; i++) {
+                ripples[i].parentNode.removeChild(ripples[i]);
+            }
+        }
+
+        if (checkbox) {
+            checkbox.checked = false;
+        }
+    }
+
+    /**
      * Met a jour les champs apres un refresh de token.
      *
      * @param {string} newFieldName      Nouveau nom de champ.
@@ -715,6 +745,7 @@ function createDOMInjector(form, targetContainer, theme) {
     return {
         inject: inject,
         update: update,
+        reset: reset,
         getCheckbox: getCheckbox,
         getLogInput: getLogInput,
         onCheck: onCheck,

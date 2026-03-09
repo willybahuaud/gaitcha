@@ -19,7 +19,7 @@ import { attachSubmitSerializer } from './LogSerializer.js';
  * @param {object}          options            Options optionnelles.
  * @param {string}          options.label      Label de la checkbox.
  * @param {HTMLElement}     options.container  Conteneur cible pour l'injection DOM.
- * @return {object} Instance avec destroy().
+ * @return {object} Instance avec destroy() et reset().
  */
 function initGaitchaForm(form, endpoint, options) {
     const label = (options && options.label) || 'Je ne suis pas un robot';
@@ -73,6 +73,28 @@ function initGaitchaForm(form, endpoint, options) {
     detectorCleanup = listenForFirstInteraction(form, handleFirstInteraction);
 
     /**
+     * Remet le captcha en état initial pour un nouveau cycle.
+     *
+     * Décoche le widget, vide le log comportemental, et demande
+     * un nouveau token au serveur. Appelé après un rejet serveur
+     * pour permettre à l'utilisateur de réessayer.
+     */
+    function reset() {
+        injector.reset();
+        logger.reset();
+
+        // Demander un nouveau token et mettre à jour les champs.
+        fetcher.fetch()
+            .then(function onResetFetchSuccess(data) {
+                injector.update(data.field_name, data.token, data.token_field_name);
+            })
+            .catch(function onResetFetchError() {
+                // eslint-disable-next-line no-console
+                console.warn('Gaitcha: token refresh after reset failed.');
+            });
+    }
+
+    /**
      * Nettoie toutes les ressources.
      */
     function destroy() {
@@ -89,6 +111,7 @@ function initGaitchaForm(form, endpoint, options) {
 
     return {
         destroy: destroy,
+        reset: reset,
     };
 }
 
