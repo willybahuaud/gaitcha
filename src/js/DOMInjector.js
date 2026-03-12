@@ -74,11 +74,11 @@ var WIDGET_CSS = [
     '  border-radius: var(--g-radius) !important;',
     '  box-shadow: var(--g-shadow) !important;',
     '  padding: 14px 16px 12px !important;',
-    '  width: 280px !important;',
+    '  width: 100% !important;',
+    '  max-width: 260px !important;',
     '  display: flex !important;',
     '  align-items: center !important;',
-    '  justify-content: space-between !important;',
-    '  gap: 12px !important;',
+    '  gap: 11px !important;',
     '  transition: border-color var(--g-transition), box-shadow var(--g-transition), background var(--g-transition);',
     '  cursor: pointer;',
     '  user-select: none;',
@@ -173,13 +173,15 @@ var WIDGET_CSS = [
     '}',
     '',
 
-    /* ── Left section (checkbox visual + label) ── */
+    /* ── Content section (label + badge) ── */
     '.gaitcha-widget__left {',
     '  display: flex !important;',
     '  align-items: center !important;',
-    '  gap: 11px !important;',
+    '  gap: 8px !important;',
     '  flex: 1 !important;',
     '  min-width: 0 !important;',
+    '  overflow: hidden !important;',
+    '  container-type: inline-size !important;',
     '}',
     '',
 
@@ -233,18 +235,21 @@ var WIDGET_CSS = [
     '  font-weight: 500 !important;',
     '  color: var(--g-text) !important;',
     '  line-height: 1.3 !important;',
-    '  white-space: nowrap !important;',
+    '  white-space: normal !important;',
+    '  flex: 1 !important;',
+    '  min-width: 0 !important;',
     '  transition: color var(--g-transition);',
     '}',
     '',
 
-    /* ── Badge (right side) ── */
+    /* ── Badge (shield above brand, compact mode: shield with "g" overlay) ── */
     '.gaitcha-widget__badge {',
     '  display: flex !important;',
     '  flex-direction: column !important;',
     '  align-items: center !important;',
     '  gap: 3px !important;',
     '  flex-shrink: 0 !important;',
+    '  position: relative !important;',
     '}',
     '',
     '.gaitcha-widget__shield {',
@@ -263,6 +268,35 @@ var WIDGET_CSS = [
     '  line-height: 1 !important;',
     '  opacity: 0.7;',
     '  text-transform: lowercase;',
+    '}',
+    '',
+    '.gaitcha-widget__brand-initial {',
+    '  display: none !important;',
+    '  position: absolute !important;',
+    '  top: 44% !important;',
+    '  left: 50% !important;',
+    '  transform: translate(-50%, -50%) !important;',
+    '  font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace !important;',
+    '  font-size: 9px !important;',
+    '  font-weight: 500 !important;',
+    '  color: var(--g-sub) !important;',
+    '  line-height: 1 !important;',
+    '  text-transform: lowercase;',
+    '  pointer-events: none !important;',
+    '}',
+    '',
+    '.gaitcha-widget--checked .gaitcha-widget__brand-initial {',
+    '  color: var(--g-success) !important;',
+    '}',
+    '',
+    /* ── Compact badge (container query on __left) ── */
+    '@container (max-width: 180px) {',
+    '  .gaitcha-widget__brand {',
+    '    display: none !important;',
+    '  }',
+    '  .gaitcha-widget__brand-initial {',
+    '    display: block !important;',
+    '  }',
     '}',
     '',
 
@@ -415,6 +449,13 @@ function createDOMInjector(form, targetContainer, theme) {
     /** @type {number|null} */
     var loadingTimer = null;
 
+    /** @type {number} Timestamp du touchstart sur le widget (pour calculer la durée du tap). */
+    var tapStartTime = 0;
+
+    /** @type {object|null} Données du geste tap collectées au touchend. */
+    var tapGestureData = null;
+
+
     /**
      * Injecte le widget dans le formulaire.
      *
@@ -454,10 +495,7 @@ function createDOMInjector(form, targetContainer, theme) {
         checkbox.setAttribute('tabindex', '-1');
         checkbox.setAttribute('aria-hidden', 'true');
 
-        // Left section: checkbox visual + label.
-        var left = document.createElement('div');
-        left.className = 'gaitcha-widget__left';
-
+        // Checkbox visual (standalone, vertically centered by widget flex).
         var checkboxVisual = document.createElement('div');
         checkboxVisual.className = 'gaitcha-widget__checkbox';
 
@@ -467,14 +505,15 @@ function createDOMInjector(form, targetContainer, theme) {
         checkboxVisual.appendChild(spinner);
         checkboxVisual.appendChild(createCheckmarkSVG());
 
+        // Content section: label + badge (badge wraps below when narrow).
+        var left = document.createElement('div');
+        left.className = 'gaitcha-widget__left';
+
         var labelSpan = document.createElement('span');
         labelSpan.className = 'gaitcha-widget__label';
         labelSpan.textContent = labelText;
 
-        left.appendChild(checkboxVisual);
-        left.appendChild(labelSpan);
-
-        // Badge (right side).
+        // Badge (shield above brand, compact: shield with "g" overlay).
         var badge = document.createElement('div');
         badge.className = 'gaitcha-widget__badge';
         badge.appendChild(createShieldSVG());
@@ -484,10 +523,18 @@ function createDOMInjector(form, targetContainer, theme) {
         brandSpan.textContent = 'gaitcha';
         badge.appendChild(brandSpan);
 
+        var brandInitial = document.createElement('span');
+        brandInitial.className = 'gaitcha-widget__brand-initial';
+        brandInitial.textContent = 'g';
+        badge.appendChild(brandInitial);
+
+        left.appendChild(labelSpan);
+        left.appendChild(badge);
+
         // Assemble widget.
         widget.appendChild(checkbox);
+        widget.appendChild(checkboxVisual);
         widget.appendChild(left);
-        widget.appendChild(badge);
 
         // Hidden : token signe.
         tokenInput = document.createElement('input');
@@ -504,6 +551,8 @@ function createDOMInjector(form, targetContainer, theme) {
         // Event handlers.
         widget.addEventListener('click', handleWidgetClick);
         widget.addEventListener('keydown', handleWidgetKeydown);
+        widget.addEventListener('touchstart', handleWidgetTouchStart, { passive: true });
+        widget.addEventListener('touchend', handleWidgetTouchEnd);
 
         // Injecter dans le conteneur cible, ou avant le bouton submit, ou a la fin du form.
         if (targetContainer) {
@@ -522,10 +571,14 @@ function createDOMInjector(form, targetContainer, theme) {
                 form.appendChild(logInput);
             }
         }
+
     }
 
     /**
      * Handler de clic sur le widget.
+     *
+     * Ignoré si le tap touch a déjà déclenché le loading (le navigateur
+     * synthétise un click après touchend — on ne veut pas double-fire).
      *
      * @param {MouseEvent} event Evenement click.
      */
@@ -538,6 +591,69 @@ function createDOMInjector(form, targetContainer, theme) {
         }
 
         triggerRipple(event);
+        startLoading(event);
+    }
+
+    /**
+     * Handler touchstart sur le widget — enregistre le début du geste tap.
+     *
+     * @param {TouchEvent} event Événement touchstart.
+     */
+    function handleWidgetTouchStart(event) {
+        if (event.isTrusted === false || state !== 'idle') {
+            return;
+        }
+
+        tapStartTime = performance.now();
+    }
+
+    /**
+     * Handler touchend sur le widget — collecte les données du geste tap
+     * et déclenche le loading à la place du click synthétisé.
+     *
+     * preventDefault() empêche le navigateur de synthétiser un click
+     * après le touchend, évitant un double-fire avec handleWidgetClick.
+     *
+     * @param {TouchEvent} event Événement touchend.
+     */
+    function handleWidgetTouchEnd(event) {
+        if (event.isTrusted === false || state !== 'idle' || tapStartTime === 0) {
+            return;
+        }
+
+        var touch = event.changedTouches && event.changedTouches.length
+            ? event.changedTouches[0]
+            : null;
+
+        if (!touch || !widget) {
+            tapStartTime = 0;
+            return;
+        }
+
+        // Vérifier que le doigt est encore dans les limites du widget.
+        var rect = widget.getBoundingClientRect();
+        if (touch.clientX < rect.left || touch.clientX > rect.right
+            || touch.clientY < rect.top || touch.clientY > rect.bottom) {
+            tapStartTime = 0;
+            return;
+        }
+
+        event.preventDefault();
+
+        var duration = Math.round(performance.now() - tapStartTime);
+        tapStartTime = 0;
+
+        tapGestureData = { duration: duration };
+
+        if (touch.force > 0) {
+            tapGestureData.force = Math.round(touch.force * 1000) / 1000;
+        }
+        if (touch.radiusX > 0) {
+            tapGestureData.radiusX = Math.round(touch.radiusX * 10) / 10;
+            tapGestureData.radiusY = Math.round(touch.radiusY * 10) / 10;
+        }
+
+        triggerRipple({ clientX: touch.clientX, clientY: touch.clientY });
         startLoading(event);
     }
 
@@ -631,9 +747,13 @@ function createDOMInjector(form, targetContainer, theme) {
             checkbox.checked = true;
         }
 
+        // Consommer les données du geste tap avant de notifier.
+        var currentTapData = tapGestureData;
+        tapGestureData = null;
+
         // Notifier les observers (GaitchaForm enregistre le log ici).
         for (var i = 0; i < checkCallbacks.length; i++) {
-            checkCallbacks[i](originalEvent);
+            checkCallbacks[i](originalEvent, currentTapData);
         }
     }
 
@@ -674,6 +794,9 @@ function createDOMInjector(form, targetContainer, theme) {
         if (checkbox) {
             checkbox.checked = false;
         }
+
+        tapStartTime = 0;
+        tapGestureData = null;
     }
 
     /**
@@ -724,6 +847,8 @@ function createDOMInjector(form, targetContainer, theme) {
         if (widget) {
             widget.removeEventListener('click', handleWidgetClick);
             widget.removeEventListener('keydown', handleWidgetKeydown);
+            widget.removeEventListener('touchstart', handleWidgetTouchStart);
+            widget.removeEventListener('touchend', handleWidgetTouchEnd);
             if (widget.parentNode) {
                 widget.parentNode.removeChild(widget);
             }

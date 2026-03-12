@@ -9,8 +9,9 @@ namespace Gaitcha;
  *
  * Le log attendu est un JSON avec cette structure :
  * {
- *   "moves": [{"t": int, "x": int, "y": int}, ...],
- *   "check": {"type": "click"|"key"|"touch", "t": int, "screenDx"?: int, "screenDy"?: int, ...},
+ *   "moves": [{"t": int, "x": int, "y": int, "force"?: float, "rX"?: float, "rY"?: float}, ...],
+ *   "check": {"type": "click"|"key"|"touch", "t": int, "screenDx"?: int, "screenDy"?: int,
+ *             "tapDuration"?: int, "tapForce"?: float, "tapRX"?: float, "tapRY"?: float, ...},
  *   "tabs":  [{"t": int, "key": string, "dur": int}, ...],
  *   "dt":    int,
  *   "coalescedAvg"?: float,
@@ -21,6 +22,11 @@ namespace Gaitcha;
  * - "dur" (tabs) : durée keydown→keyup en ms. Absent ou 0 si keyup non capté.
  * - "screenDx"/"screenDy" (check) : delta screenX-clientX / screenY-clientY.
  *   Vaut 0 en CDP Playwright (leak de détection), > 0 en vrai navigateur desktop.
+ * - "force" (moves) : pression du doigt (0-1). iOS Safari, certains Android. Absent si non supporté.
+ * - "rX"/"rY" (moves) : rayon de contact en px. Disponible sur la plupart des devices touch.
+ * - "tapDuration" (check) : durée touchstart→touchend sur le widget en ms.
+ * - "tapForce" (check) : pression au moment du touchend sur le widget.
+ * - "tapRX"/"tapRY" (check) : rayon de contact au moment du touchend.
  * - "coalescedAvg" (log root) : moyenne de getCoalescedEvents().length par mousemove.
  *   > 1 en vrai navigateur (hardware buffer), = 1 en CDP. Absent si non supporté (Safari).
  * - "moveCount" (log root) : nombre total de mousemove reçus avant throttle/buffer circulaire.

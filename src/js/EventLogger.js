@@ -102,6 +102,9 @@ function createEventLogger(form) {
     /**
      * Enregistre un touchmove dans le buffer circulaire.
      *
+     * Collecte les données tactiles supplémentaires (pression, rayon de
+     * contact) quand le device les fournit, pour le scoring comportemental.
+     *
      * @param {TouchEvent} event Événement touchmove.
      */
     function handleTouchMove(event) {
@@ -122,11 +125,24 @@ function createEventLogger(form) {
         lastMoveTime = now;
 
         const touch = event.touches[0];
-        moves.push({
+        var entry = {
             t: Math.round(now - firstEventTime),
             x: Math.round(touch.clientX),
             y: Math.round(touch.clientY),
-        });
+        };
+
+        // Pression (0-1) — iOS Safari, certains Android.
+        if (touch.force > 0) {
+            entry.force = Math.round(touch.force * 1000) / 1000;
+        }
+
+        // Rayon de contact (px) — la plupart des devices touch.
+        if (touch.radiusX > 0) {
+            entry.rX = Math.round(touch.radiusX * 10) / 10;
+            entry.rY = Math.round(touch.radiusY * 10) / 10;
+        }
+
+        moves.push(entry);
 
         if (moves.length > MAX_MOVES) {
             moves.shift();
@@ -215,10 +231,12 @@ function createEventLogger(form) {
     /**
      * Enregistre le check event quand la checkbox est cochée.
      *
-     * @param {HTMLElement} targetElement Element visible (widget) pour le calcul d'offset.
-     * @param {Event} event Événement d'origine (click ou keydown).
+     * @param {HTMLElement}  targetElement Element visible (widget) pour le calcul d'offset.
+     * @param {Event}        event         Événement d'origine (click, keydown ou touchend).
+     * @param {object|null}  tapData       Données du geste tap (durée, pression, rayon).
+     *                                     Fourni par DOMInjector pour les interactions touch.
      */
-    function recordCheck(targetElement, event) {
+    function recordCheck(targetElement, event, tapData) {
         if (frozen) {
             return;
         }
@@ -274,6 +292,21 @@ function createEventLogger(form) {
             if (event.screenX !== undefined) {
                 checkEvent.screenDx = Math.round(event.screenX - event.clientX);
                 checkEvent.screenDy = Math.round(event.screenY - event.clientY);
+            }
+        }
+
+        // Données du geste tap (touchstart → touchend sur le widget).
+        // Permet de scorer la durée d'appui, la pression et le rayon de contact.
+        if (type === 'touch' && tapData) {
+            if (tapData.duration > 0) {
+                checkEvent.tapDuration = tapData.duration;
+            }
+            if (tapData.force > 0) {
+                checkEvent.tapForce = tapData.force;
+            }
+            if (tapData.radiusX > 0) {
+                checkEvent.tapRX = tapData.radiusX;
+                checkEvent.tapRY = tapData.radiusY;
             }
         }
 

@@ -257,7 +257,17 @@ class BehavioralScorer
     }
 
     /**
-     * Scoring profil touch : similaire au mouse avec buffer plus court, 7 signaux.
+     * Scoring profil touch : 10 signaux avec redistribution de poids.
+     *
+     * Sur un formulaire court (login), l'utilisateur tape les champs sans
+     * générer de touchmove → la plupart des signaux de trajectoire manquent.
+     * Au lieu de fallback 0.5 (qui donne un score final ~0.45), les poids
+     * des signaux sans données sont redistribués aux signaux exploitables.
+     *
+     * 3 nouveaux signaux touch-spécifiques :
+     * - touch_pressure_variance : variation de pression pendant le swipe
+     * - touch_radius_variance   : variation du rayon de contact pendant le swipe
+     * - natural_tap             : caractéristiques du geste tap sur le widget
      *
      * @param array $log Log parsé.
      * @return array{score: float, profile: string, details: array<string, float>}
@@ -266,9 +276,8 @@ class BehavioralScorer
     {
         $moves   = $log['moves'] ?? [];
         $check   = $log['check'];
-        $details = [];
 
-        // Kill signal : clic exactement au centre.
+        // Kill signal : tap exactement au centre.
         if (isset($check['offset'])) {
             $ox = (float) ($check['offset']['x'] ?? 0);
             $oy = (float) ($check['offset']['y'] ?? 0);
@@ -277,48 +286,248 @@ class BehavioralScorer
             }
         }
 
-        // Le touch est plus court, moins de mouvements attendus.
+        $moveCount     = count($moves);
         $minTouchMoves = 3;
 
-        // Signal 1 : trajectoire existe (poids 0.10).
-        $moveCount             = count($moves);
-        $trajectoryScore       = min(1.0, $moveCount / $minTouchMoves);
-        $details['trajectory'] = $trajectoryScore;
+        // Définition des 10 signaux avec poids et flag "données exploitables".
+        // Les signaux sans données verront leur poids redistribué.
+        $signals = [];
 
-        // Signal 2 : non-linéarité (poids 0.10).
-        $nonLinearityScore        = count($moves) >= 2 ? $this->calculateNonLinearity($moves) : 0.5;
-        $details['non_linearity'] = $nonLinearityScore;
+        // Signal 1 : trajectoire existe (poids 0.05).
+        $signals['trajectory'] = [
+            'score'  => min(1.0, $moveCount / $minTouchMoves),
+            'weight' => 0.05,
+            'actual' => true,
+        ];
 
-        // Signal 3 : offset du touch (poids 0.10).
-        $offsetScore       = $this->calculateClickOffset($check);
-        $details['offset'] = $offsetScore;
+        // Signal 2 : non-linéarité (poids 0.05).
+        $signals['non_linearity'] = [
+            'score'  => $moveCount >= 2 ? $this->calculateNonLinearity($moves) : 0.0,
+            'weight' => 0.05,
+            'actual' => $moveCount >= 2,
+        ];
 
-        // Signal 4 : variation de vitesse (poids 0.10).
-        $speedVariationScore        = count($moves) >= 2 ? $this->calculateSpeedVariation($moves) : 0.5;
-        $details['speed_variation'] = $speedVariationScore;
+        // Signal 3 : offset du tap (poids 0.10).
+        $signals['offset'] = [
+            'score'  => $this->calculateClickOffset($check),
+            'weight' => 0.10,
+            'actual' => isset($check['offset']),
+        ];
 
-        // Signal 5 : angular jitter (poids 0.10).
-        // Besoin d'au moins 4 points pour 2+ angles exploitables.
-        $angularJitterScore        = count($moves) >= 4 ? $this->calculateAngularJitter($moves) : 0.5;
-        $details['angular_jitter'] = $angularJitterScore;
+        // Signal 4 : variation de vitesse (poids 0.05).
+        $signals['speed_variation'] = [
+            'score'  => $moveCount >= 3 ? $this->calculateSpeedVariation($moves) : 0.0,
+            'weight' => 0.05,
+            'actual' => $moveCount >= 3,
+        ];
 
-        // Signal 6 : direction reversals (poids 0.20).
-        $directionReversalsScore        = count($moves) >= 4 ? $this->calculateDirectionReversals($moves) : 0.5;
-        $details['direction_reversals'] = $directionReversalsScore;
+        // Signal 5 : angular jitter (poids 0.05).
+        $signals['angular_jitter'] = [
+            'score'  => $moveCount >= 4 ? $this->calculateAngularJitter($moves) : 0.0,
+            'weight' => 0.05,
+            'actual' => $moveCount >= 4,
+        ];
 
-        // Signal 7 : endpoint deceleration (poids 0.20).
-        $endpointDecelerationScore        = count($moves) >= 6 ? $this->calculateEndpointDeceleration($moves) : 0.5;
-        $details['endpoint_deceleration'] = $endpointDecelerationScore;
+        // Signal 6 : direction reversals (poids 0.10).
+        $signals['direction_reversals'] = [
+            'score'  => $moveCount >= 4 ? $this->calculateDirectionReversals($moves) : 0.0,
+            'weight' => 0.10,
+            'actual' => $moveCount >= 4,
+        ];
 
-        $score = ($trajectoryScore * 0.10)
-               + ($nonLinearityScore * 0.10)
-               + ($offsetScore * 0.10)
-               + ($speedVariationScore * 0.10)
-               + ($angularJitterScore * 0.10)
-               + ($directionReversalsScore * 0.20)
-               + ($endpointDecelerationScore * 0.20);
+        // Signal 7 : endpoint deceleration (poids 0.10).
+        $signals['endpoint_deceleration'] = [
+            'score'  => $moveCount >= 6 ? $this->calculateEndpointDeceleration($moves) : 0.0,
+            'weight' => 0.10,
+            'actual' => $moveCount >= 6,
+        ];
+
+        // Signal 8 : variance de pression touch (poids 0.15).
+        $signals['touch_pressure_variance'] = $this->calculateTouchPressureVariance($moves);
+
+        // Signal 9 : variance du rayon de contact (poids 0.15).
+        $signals['touch_radius_variance'] = $this->calculateTouchRadiusVariance($moves);
+
+        // Signal 10 : geste tap naturel (poids 0.20).
+        $signals['natural_tap'] = $this->calculateNaturalTap($check);
+
+        // Redistribution : les signaux sans données voient leur poids
+        // réparti proportionnellement sur les signaux exploitables.
+        $score = $this->redistributeAndScore($signals);
+
+        // Construire les détails pour le debug.
+        $details = [];
+        foreach ($signals as $name => $signal) {
+            $details[$name] = $signal['score'];
+        }
 
         return $this->result($score, 'touch', $details);
+    }
+
+    /**
+     * Calcule la variance de pression (force) sur les touchmove.
+     *
+     * Un doigt humain varie naturellement en pression pendant un swipe.
+     * Un bot CDP ne génère pas de données de force (toujours 0).
+     *
+     * @param array $moves Points touchmove avec force optionnel.
+     * @return array{score: float, weight: float, actual: bool}
+     */
+    private function calculateTouchPressureVariance(array $moves): array
+    {
+        $forces = [];
+        foreach ($moves as $move) {
+            if (isset($move['force']) && is_numeric($move['force']) && (float) $move['force'] > 0) {
+                $forces[] = (float) $move['force'];
+            }
+        }
+
+        if (count($forces) < 3) {
+            return ['score' => 0.0, 'weight' => 0.15, 'actual' => false];
+        }
+
+        $mean = array_sum($forces) / count($forces);
+        if ($mean < 0.001) {
+            return ['score' => 0.0, 'weight' => 0.15, 'actual' => false];
+        }
+
+        $stddev = $this->standardDeviation($forces, $mean);
+        $cv     = $stddev / $mean;
+
+        // CV > 0.15 = variation humaine naturelle. CV ~0 = synthétique.
+        return ['score' => min(1.0, $cv / 0.15), 'weight' => 0.15, 'actual' => true];
+    }
+
+    /**
+     * Calcule la variance du rayon de contact sur les touchmove.
+     *
+     * L'aire de contact du doigt change quand l'angle ou la pression varie.
+     * Disponible sur la plupart des devices touch (même sans force).
+     *
+     * @param array $moves Points touchmove avec rX/rY optionnels.
+     * @return array{score: float, weight: float, actual: bool}
+     */
+    private function calculateTouchRadiusVariance(array $moves): array
+    {
+        $radii = [];
+        foreach ($moves as $move) {
+            if (isset($move['rX']) && is_numeric($move['rX']) && (float) $move['rX'] > 0) {
+                $radii[] = (float) $move['rX'];
+            }
+        }
+
+        if (count($radii) < 3) {
+            return ['score' => 0.0, 'weight' => 0.15, 'actual' => false];
+        }
+
+        $mean = array_sum($radii) / count($radii);
+        if ($mean < 0.001) {
+            return ['score' => 0.0, 'weight' => 0.15, 'actual' => false];
+        }
+
+        $stddev = $this->standardDeviation($radii, $mean);
+        $cv     = $stddev / $mean;
+
+        // CV > 0.10 = variation humaine (l'angle du doigt change).
+        return ['score' => min(1.0, $cv / 0.10), 'weight' => 0.15, 'actual' => true];
+    }
+
+    /**
+     * Score le geste tap sur le widget (touchstart → touchend).
+     *
+     * Analyse la durée de contact, la pression et le rayon de contact
+     * au moment du tap. Un humain produit un tap de 50-200ms avec des
+     * données physiques (force, radius). CDP/Playwright produit un tap
+     * quasi-instantané (< 5ms) sans données physiques.
+     *
+     * @param array $check Check event avec tapDuration, tapForce, tapRX optionnels.
+     * @return array{score: float, weight: float, actual: bool}
+     */
+    private function calculateNaturalTap(array $check): array
+    {
+        if (!isset($check['tapDuration'])) {
+            return ['score' => 0.0, 'weight' => 0.20, 'actual' => false];
+        }
+
+        $duration = (int) $check['tapDuration'];
+
+        // Durée < 20ms → tap synthétique (CDP keyboard.press-like).
+        if ($duration < 20) {
+            return ['score' => 0.0, 'weight' => 0.20, 'actual' => true];
+        }
+
+        // Scoring de la durée :
+        // 20-50ms  → score partiel (tap très rapide, possible mais rare)
+        // 50-200ms → zone optimale humaine
+        // 200-500ms → long tap, possible (hésitation)
+        // > 500ms  → long press, geste différent
+        if ($duration <= 50) {
+            $score = 0.3 + ($duration - 20) / 30.0 * 0.4;
+        } elseif ($duration <= 200) {
+            $score = 1.0;
+        } elseif ($duration <= 500) {
+            $score = 1.0 - ($duration - 200) / 300.0 * 0.3;
+        } else {
+            $score = 0.5;
+        }
+
+        // Bonus pression : le device supporte force ET une valeur réaliste.
+        if (isset($check['tapForce'])) {
+            $force = (float) $check['tapForce'];
+            if ($force >= 0.05 && $force <= 0.9) {
+                $score = min(1.0, $score + 0.15);
+            }
+        }
+
+        // Bonus rayon de contact : empreinte de doigt réaliste (3-40px).
+        if (isset($check['tapRX'])) {
+            $rx = (float) $check['tapRX'];
+            if ($rx >= 3.0 && $rx <= 40.0) {
+                $score = min(1.0, $score + 0.15);
+            }
+        }
+
+        return ['score' => round(min(1.0, $score), 4), 'weight' => 0.20, 'actual' => true];
+    }
+
+    /**
+     * Calcule le score final avec redistribution des poids.
+     *
+     * Les signaux sans données exploitables (actual = false) voient leur
+     * poids redistribué proportionnellement aux signaux qui ont des données.
+     * Évite le biais des fallback 0.5 qui tirent le score vers la médiane.
+     *
+     * @param array<string, array{score: float, weight: float, actual: bool}> $signals Signaux à scorer.
+     * @return float Score final de 0.0 à 1.0.
+     */
+    private function redistributeAndScore(array $signals): float
+    {
+        $totalActualWeight = 0.0;
+
+        foreach ($signals as $signal) {
+            if ($signal['actual']) {
+                $totalActualWeight += $signal['weight'];
+            }
+        }
+
+        // Aucun signal exploitable — score neutre.
+        if ($totalActualWeight < 0.001) {
+            return 0.5;
+        }
+
+        $score = 0.0;
+
+        foreach ($signals as $signal) {
+            if ($signal['actual']) {
+                // Poids effectif = poids original × (total / total exploitable).
+                // Revient à normaliser pour que les poids exploitables somment à 1.0
+                // quand les poids originaux sommaient à 1.0.
+                $effectiveWeight = $signal['weight'] / $totalActualWeight;
+                $score += $signal['score'] * $effectiveWeight;
+            }
+        }
+
+        return $score;
     }
 
     /**

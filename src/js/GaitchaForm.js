@@ -49,8 +49,8 @@ function initGaitchaForm(form, endpoint, options) {
                 // Enregistrer le check via le callback du widget.
                 // Passer le widget visible (pas le checkbox caché 0×0px)
                 // pour un calcul d'offset pertinent.
-                injector.onCheck(function handleCheck(event) {
-                    logger.recordCheck(injector.getWidget(), event);
+                injector.onCheck(function handleCheck(event, tapData) {
+                    logger.recordCheck(injector.getWidget(), event, tapData);
 
                     // Sérialiser le log immédiatement — le logger est frozen,
                     // le payload ne changera plus. Nécessaire pour les plugins
@@ -62,11 +62,12 @@ function initGaitchaForm(form, endpoint, options) {
                     }
                 });
 
-                // Sérialiser le log au submit.
+                // Sérialiser le log au submit (seulement si le widget a été coché).
                 serializerCleanup = attachSubmitSerializer(
                     form,
                     function payloadGetter() { return logger.getPayload(); },
-                    function logInputGetter() { return injector.getLogInput(); }
+                    function logInputGetter() { return injector.getLogInput(); },
+                    function checkboxGetter() { return injector.getCheckbox(); }
                 );
 
                 // Auto-refresh : mettre à jour les champs DOM.

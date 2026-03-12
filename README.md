@@ -1,6 +1,6 @@
 # Gaitcha
 
-Self-hosted behavioral captcha. A simple checkbox analyzes how the user interacts with it — mouse trajectory, keyboard timing, physiological signals — to tell humans from bots. No third-party dependency, no tracking, no friction.
+Self-hosted behavioral captcha. A simple checkbox analyzes how the user interacts with it — mouse trajectory, keyboard timing, touch gestures — to tell humans from bots. No third-party dependency, no tracking, no friction.
 
 ## Why
 
@@ -13,7 +13,7 @@ Gaitcha takes a different approach: it watches **how** the user reaches and chec
 ### Install
 
 ```bash
-composer require wabeo/gaitcha
+composer require willybahuaud/gaitcha
 ```
 
 Then build the JS client:
@@ -86,27 +86,67 @@ if ($result->isAccepted()) {
 ### Manual JS init
 
 ```js
-Gaitcha.init(document.querySelector('#my-form'), '/captcha/init', {
+const instance = Gaitcha.init(document.querySelector('#my-form'), '/captcha/init', {
     label: 'I am not a robot',
     container: document.getElementById('captcha-slot'), // optional target element
-    classes: { // optional CSS class overrides
-        field: 'my-captcha-wrapper',
-        checkbox: 'my-checkbox',
-        label: 'my-label',
-    },
+    theme: 'auto', // 'light' (default), 'dark', or 'auto' (follows OS preference)
 });
 ```
+
+`init()` returns an instance with `destroy()` and `reset()` (see [Widget reset](#widget-reset) below).
 
 ## How It Works
 
 1. The form loads normally — no captcha field
-2. On the first interaction signal (mousemove, touch, focus), an Ajax request fetches a signed token and a random field name
-3. A visible checkbox is injected into the form
-4. The JS collects interaction events (mouse moves, keyboard tabs, timing)
-5. On submit, the behavioral log is sent alongside the token
+2. On the first interaction signal (mousemove, touchstart, focus, keydown), an Ajax request fetches a signed token and a random field name
+3. A self-contained widget (checkbox + badge) is injected into the form
+4. The JS collects interaction events: mouse moves, touch moves (with pressure and contact radius when available), keyboard tabs, and timing data
+5. When the user checks the widget, the behavioral log is serialized immediately — ready for both classic form submits and AJAX-based plugins
 6. The server verifies the token (signature + TTL) and scores the behavior across multiple signals
 
-The scoring engine detects three profiles (mouse, keyboard, touch) and uses whichever scores highest. Several "kill signals" cause immediate rejection: interaction too fast, no movement before click, pixel-perfect center click, no keyboard events before check.
+The scoring engine detects three profiles and uses the one that matches the check event:
+
+- **Mouse** — trajectory shape, non-linearity, speed variation, angular jitter, direction reversals, endpoint deceleration, click offset, anti-Bezier signals, anti-CDP signals (coalesced events average, screen coordinate delta)
+- **Keyboard** — focus-to-key timing, dwell time variance, navigation pattern (Tab/Shift+Tab)
+- **Touch** — same trajectory signals as mouse, plus touch-specific data: pressure variance across the swipe, contact radius variance, and tap gesture analysis (duration, force, radiusX/Y on the final tap)
+
+Multiple "kill signals" cause immediate rejection: interaction under 100ms, no movement before click, pixel-perfect center click/tap. If the primary profile doesn't kill, a secondary profile is scored when data exists — the highest score wins (benefit of the doubt for the human).
+
+## Widget
+
+The widget is a self-contained UI component injected at runtime: custom checkbox with animated states (idle, loading with spinner, checked with bounce), a "gaitcha" badge, and hidden inputs for the token and behavioral log. All styles are injected via a single `<style>` tag — no external CSS file needed.
+
+### Theming
+
+Three modes, set via the `theme` option in `Gaitcha.init()` (not available as an HTML attribute — auto-init always uses `light`):
+
+| Value | Behavior |
+|---|---|
+| `'light'` | Light background (default) |
+| `'dark'` | Dark background, forced |
+| `'auto'` | Follows OS preference via `prefers-color-scheme` |
+
+All CSS variables are scoped to `.gaitcha-widget` (no `:root` pollution). Every property uses `!important` to survive third-party form plugin CSS that tends to override everything.
+
+### Responsive layout
+
+The widget is fluid (`width: 100%`, `max-width: 260px`). On narrow containers, a CSS container query on the content area switches the badge to compact mode — the brand name collapses to a "g" overlay on the shield icon. No media queries, so it adapts to the actual available space regardless of viewport size.
+
+### Widget reset
+
+After a server-side rejection on AJAX forms, the widget needs to go back to an unchecked state so the user can retry. Two ways to do it:
+
+```js
+// Via the instance returned by init()
+const instance = Gaitcha.init(form, endpoint, options);
+// ... after rejection:
+instance.reset();
+
+// Or via the static API
+Gaitcha.reset(form);
+```
+
+`reset()` unchecks the widget, clears the behavioral log, and fetches a fresh token from the server. The user gets a clean slate for a new attempt.
 
 ## Configuration
 
