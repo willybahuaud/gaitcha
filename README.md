@@ -209,6 +209,10 @@ npm run serve
 # → http://localhost:8080
 ```
 
+## WordPress plugin
+
+Using WordPress? Check out [Gaitcha for WordPress](https://github.com/willybahuaud/gaitcha-for-wp) — a ready-made plugin with connectors for CF7, Gravity Forms, WPForms, Fluent Forms, Formidable, Ninja Forms, WS Form, Elementor Pro, and native WordPress forms (login, register, lost password, comments).
+
 ## Author
 
 [Willy Bahuaud](https://wabeo.fr) — WordPress Architect
