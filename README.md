@@ -4,9 +4,11 @@ Self-hosted behavioral captcha. A simple checkbox analyzes how the user interact
 
 ## Why
 
-Most captcha solutions either rely on third-party services (sending user data to external servers) or use proof-of-work challenges that automated browsers can solve trivially.
+Most captcha solutions either rely on third-party services (sending user data to external servers) or use proof-of-work alone — which automated browsers solve without breaking a sweat.
 
 Gaitcha takes a different approach: it watches **how** the user reaches and checks a visible checkbox. Humans hesitate, deviate, decelerate, click slightly off-center. Bots click perfectly, instantly, without inertia. The behavioral log is scored server-side — no external API, no user fingerprinting, fully stateless.
+
+An optional [proof-of-work layer](#proof-of-work) sits in front: the client must burn CPU before the server even hands out the captcha field. Behavioral analysis catches the fakes; proof of work makes faking expensive at scale.
 
 ## Quick Start
 
@@ -56,7 +58,11 @@ class CaptchaEndpoint extends AbstractEndpoint
 
     public function handle(): void
     {
-        $this->sendJsonResponse($this->handleInit());
+        // Pass the decoded JSON body — required when 'pow' is enabled,
+        // harmless otherwise.
+        $request = json_decode((string) file_get_contents('php://input'), true);
+
+        $this->sendJsonResponse($this->handleInit(is_array($request) ? $request : []));
     }
 }
 
@@ -97,9 +103,9 @@ const instance = Gaitcha.init(document.querySelector('#my-form'), '/captcha/init
 
 ## How It Works
 
-1. The form loads normally — no captcha field
-2. On the first interaction signal (mousemove, touchstart, focus, keydown), an Ajax request fetches a signed token and a random field name
-3. A self-contained widget (checkbox + badge) is injected into the form
+1. The form loads with a **placeholder widget** — same dimensions as the final captcha (zero layout shift), visibly dimmed, with no field name and no token. It announces the captcha without exposing anything
+2. On the first interaction signal (mousemove, touchstart, focus, keydown), the client contacts the init endpoint. If proof of work is enabled, the server answers with a challenge that a Web Worker solves in the background (a spinner shows in the placeholder meanwhile)
+3. The init endpoint then delivers a signed token and a random field name; the placeholder is upgraded in place into the real, interactive widget
 4. The JS collects interaction events: mouse moves, touch moves (with pressure and contact radius when available), keyboard tabs, and timing data
 5. When the user checks the widget, the behavioral log is serialized immediately — ready for both classic form submits and AJAX-based plugins
 6. The server verifies the token (signature + TTL) and scores the behavior across multiple signals
@@ -114,7 +120,9 @@ Multiple "kill signals" cause immediate rejection: interaction under 100ms, no m
 
 ## Widget
 
-The widget is a self-contained UI component injected at runtime: custom checkbox with animated states (idle, loading with spinner, checked with bounce), a "gaitcha" badge, and hidden inputs for the token and behavioral log. All styles are injected via a single `<style>` tag — no external CSS file needed.
+The widget is a self-contained UI component: custom checkbox with animated states (pending, idle, loading with spinner, checked with bounce), a "gaitcha" badge, and hidden inputs for the token and behavioral log. All styles are injected via a single `<style>` tag — no external CSS file needed.
+
+A placeholder version is injected as soon as the page loads: same dimensions as the active widget, dimmed checkbox and label, non-interactive, and **empty** — no field name, no token, nothing for a bot to scrape. When the user first interacts with the form, it upgrades in place. No layout shift, and the user knows from the start that a verification step exists.
 
 ### Theming
 
@@ -161,6 +169,33 @@ Gaitcha.reset(form);
 | `field_prefix` | string | `'_gc_'` | Prefix for generated field names |
 | `anti_replay` | bool | `false` | Reject reused tokens (requires a `token_store`) |
 | `token_store` | TokenStoreInterface | `null` | Storage backend for anti-replay |
+| `pow` | bool | `false` | Require a proof of work before issuing tokens |
+| `pow_difficulty` | int | `18` | Leading zero bits required (8–26) |
+| `pow_challenge_ttl` | int | `90` | Challenge validity duration (seconds) |
+
+### Proof of work
+
+Without it, `/captcha/init` is free: a bot can harvest the random field name and a valid token at will, then forge a plausible behavioral log. The PoW layer changes the economics — every token costs CPU time first.
+
+```php
+$config = new Config([
+    'secret' => 'your-secret-key-at-least-32-characters',
+    'pow'    => true,
+]);
+```
+
+How it flows, on a single endpoint:
+
+1. First call to `/captcha/init` → the server answers `{ pow_challenge: { nonce, difficulty, expires, signature } }` instead of a token. The challenge is HMAC-signed and stateless
+2. The client must find a counter such that `sha256(nonce + '.' + counter)` starts with `difficulty` zero bits. This runs in a Web Worker (with a chunked main-thread fallback if workers are blocked by CSP) — the user never notices, it overlaps with their first interaction
+3. The client calls `/captcha/init` again with `{ pow: { ...challenge, solution } }` → the server verifies the signature, expiry and solution, then issues the token
+
+At the default difficulty of 18 bits, solving takes roughly 100–500 ms on desktop, up to a couple of seconds on low-end mobile. Each behavioral check costs a human ~0 (background work), but harvesting 10,000 tokens costs a bot real CPU time. Raise `pow_difficulty` if you're under attack — each +1 doubles the cost.
+
+Two things to know:
+
+- **Your endpoint must pass the decoded JSON request body to `handleInit()`** (see the endpoint example above). With `pow` enabled, `handleInit()` throws a `LogicException` if you don't — better than failing silently
+- **Pair it with `anti_replay`** to consume each challenge nonce on first use (one solution = one token). Without a `token_store`, a solved challenge stays reusable until it expires (`pow_challenge_ttl`)
 
 ### Anti-replay
 

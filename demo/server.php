@@ -34,12 +34,14 @@ if ($uri === '/' && $_SERVER['REQUEST_METHOD'] === 'GET') {
 }
 
 $config = new Config([
-    'secret' => 'dev-secret-key-change-me-before-production!',
-    'ttl'    => 120,
-    'debug'  => true,
+    'secret'         => 'dev-secret-key-change-me-before-production!',
+    'ttl'            => 120,
+    'debug'          => true,
+    'pow'            => true,
+    'pow_difficulty' => 18,
 ]);
 
-// Endpoint init.
+// Endpoint init (deux phases : challenge PoW puis token).
 if ($uri === '/captcha/init' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $endpoint = new class($config) extends AbstractEndpoint {
         /**
@@ -53,15 +55,19 @@ if ($uri === '/captcha/init' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
         /**
          * Traite la requête init.
+         *
+         * @param array $request Corps JSON décodé de la requête.
          */
-        public function handle(): void
+        public function handle(array $request): void
         {
-            $data = $this->handleInit();
+            $data = $this->handleInit($request);
             $this->sendJsonResponse($data);
         }
     };
 
-    $endpoint->handle();
+    $requestBody = json_decode((string) file_get_contents('php://input'), true);
+
+    $endpoint->handle(is_array($requestBody) ? $requestBody : []);
     return;
 }
 
