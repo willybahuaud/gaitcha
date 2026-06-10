@@ -1,7 +1,10 @@
 /**
  * Récupère le token et le field name depuis l'endpoint Ajax.
  *
- * Gère l'auto-refresh avant expiration du TTL.
+ * Gère l'auto-refresh avant expiration du TTL, ainsi que la preuve
+ * d'effort (PoW) si le serveur l'exige : quand la réponse contient
+ * un pow_challenge, le challenge est résolu puis la requête est
+ * rejouée avec la solution. Chaque refresh résout un nouveau challenge.
  */
 
 /** Pattern attendu pour les field names (préfixe + 8 hex). */
@@ -24,13 +27,17 @@ function isValidResponse(data) {
     );
 }
 
+/** @type {number} Nombre maximum de challenges PoW résolus pour un même init. */
+var MAX_POW_ATTEMPTS = 3;
+
 /**
  * Crée un fetcher pour un endpoint Gaitcha.
  *
- * @param {string} endpoint URL de l'endpoint /captcha/init.
+ * @param {string}      endpoint  URL de l'endpoint /captcha/init.
+ * @param {object|null} powSolver Solveur PoW (optionnel, requis si le serveur exige une preuve).
  * @return {object} Fetcher avec fetch(), onRefresh(), getFieldName(), getToken(), getTokenFieldName(), destroy().
  */
-function createAjaxFetcher(endpoint) {
+function createAjaxFetcher(endpoint, powSolver) {
     /** @type {string|null} */
     let fieldName = null;
 
@@ -50,23 +57,83 @@ function createAjaxFetcher(endpoint) {
     let onRefreshCallback = null;
 
     /**
-     * Effectue le fetch initial vers l'endpoint.
+     * Envoie une requête init à l'endpoint.
      *
-     * @return {Promise<{field_name: string, token: string, ttl: number, token_field_name: string}>}
+     * @param {object|null} powPayload Preuve d'effort (challenge + solution), ou null au premier appel.
+     * @return {Promise<object>} Réponse JSON brute de l'endpoint.
      */
-    function fetchInit() {
+    function requestInit(powPayload) {
         return fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'same-origin',
+            body: JSON.stringify(powPayload ? { pow: powPayload } : {}),
         })
         .then(function handleResponse(response) {
             if (!response.ok) {
                 throw new Error('Gaitcha: endpoint returned ' + response.status);
             }
             return response.json();
-        })
-        .then(function handleData(data) {
+        });
+    }
+
+    /**
+     * Effectue le fetch vers l'endpoint, en résolvant les challenges
+     * PoW renvoyés par le serveur si nécessaire.
+     *
+     * @param {number} attempt Nombre de challenges déjà résolus pour cet init.
+     * @return {Promise<{field_name: string, token: string, ttl: number, token_field_name: string}>}
+     */
+    function fetchWithPow(attempt) {
+        return requestInit(null).then(function handleInitData(data) {
+            if (data && data.pow_challenge) {
+                return solveAndRetry(data.pow_challenge, attempt);
+            }
+            return data;
+        });
+    }
+
+    /**
+     * Résout un challenge PoW puis rejoue la requête init avec la solution.
+     *
+     * Si le serveur renvoie encore un challenge (expiré, replay…),
+     * réessaie jusqu'à MAX_POW_ATTEMPTS.
+     *
+     * @param {object} challenge Challenge { nonce, difficulty, expires, signature }.
+     * @param {number} attempt   Nombre de challenges déjà résolus.
+     * @return {Promise<object>} Réponse init du serveur.
+     */
+    function solveAndRetry(challenge, attempt) {
+        if (!powSolver) {
+            return Promise.reject(new Error('Gaitcha: server requires proof-of-work but no solver is available.'));
+        }
+        if (attempt >= MAX_POW_ATTEMPTS) {
+            return Promise.reject(new Error('Gaitcha: proof-of-work rejected after ' + attempt + ' attempts.'));
+        }
+
+        return powSolver.solve(challenge).then(function submitSolution(solution) {
+            return requestInit({
+                nonce: challenge.nonce,
+                difficulty: challenge.difficulty,
+                expires: challenge.expires,
+                signature: challenge.signature,
+                solution: solution,
+            });
+        }).then(function handleRetryData(data) {
+            if (data && data.pow_challenge) {
+                return solveAndRetry(data.pow_challenge, attempt + 1);
+            }
+            return data;
+        });
+    }
+
+    /**
+     * Effectue le fetch initial vers l'endpoint (PoW comprise si exigée).
+     *
+     * @return {Promise<{field_name: string, token: string, ttl: number, token_field_name: string}>}
+     */
+    function fetchInit() {
+        return fetchWithPow(0).then(function handleData(data) {
             if (!isValidResponse(data)) {
                 throw new Error('Gaitcha: invalid endpoint response.');
             }
@@ -97,6 +164,9 @@ function createAjaxFetcher(endpoint) {
                 if (onRefreshCallback) {
                     onRefreshCallback(fieldName, token, tokenFieldName);
                 }
+            }).catch(function handleRefreshError() {
+                // eslint-disable-next-line no-console
+                console.warn('Gaitcha: token refresh failed.');
             });
         }, refreshDelay);
     }
