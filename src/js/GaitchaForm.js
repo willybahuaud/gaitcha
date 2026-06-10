@@ -1,7 +1,8 @@
 /**
  * Orchestre Gaitcha pour un formulaire donné.
  *
- * Enchaîne : détection premier signal → fetch token → injection DOM →
+ * Enchaîne : placeholder au chargement → détection premier signal →
+ * résolution PoW (si exigée) + fetch token → activation du widget →
  * collecte events → sérialisation au submit.
  */
 
@@ -9,6 +10,7 @@ import { listenForFirstInteraction } from './InteractionDetector.js';
 import { createEventLogger } from './EventLogger.js';
 import { createAjaxFetcher } from './AjaxFetcher.js';
 import { createDOMInjector } from './DOMInjector.js';
+import { createPoWSolver } from './PoWSolver.js';
 import { attachSubmitSerializer } from './LogSerializer.js';
 
 /**
@@ -27,24 +29,33 @@ function initGaitchaForm(form, endpoint, options) {
     const theme = (options && options.theme) || 'light';
 
     const logger = createEventLogger(form);
-    const fetcher = createAjaxFetcher(endpoint);
+    const solver = createPoWSolver();
+    const fetcher = createAjaxFetcher(endpoint, solver);
     const injector = createDOMInjector(form, targetContainer, theme);
 
     let detectorCleanup = null;
     let serializerCleanup = null;
 
+    // Placeholder visible dès le chargement : annonce le captcha et
+    // réserve l'espace (zéro layout shift à l'activation).
+    injector.injectPlaceholder(label);
+
     /**
      * Appelé au premier signal d'interaction.
-     * Fetch le token, injecte les champs, démarre la collecte.
+     * Démarre la collecte, résout la PoW si exigée, fetch le token,
+     * puis active le widget.
      */
     function handleFirstInteraction() {
+        // Démarrer la collecte immédiatement : la trajectoire pendant
+        // la résolution PoW est du signal comportemental utile.
+        logger.start();
+
+        injector.setSolving(true);
+
         fetcher.fetch()
             .then(function onFetchSuccess(data) {
-                // Injecter les champs.
+                // Activer le widget (upgrade du placeholder en place).
                 injector.inject(data.field_name, data.token, data.token_field_name, label);
-
-                // Démarrer la collecte d'événements.
-                logger.start();
 
                 // Enregistrer le check via le callback du widget.
                 // Passer le widget visible (pas le checkbox caché 0×0px)
@@ -76,6 +87,7 @@ function initGaitchaForm(form, endpoint, options) {
                 });
             })
             .catch(function onFetchError(error) {
+                injector.setSolving(false);
                 // eslint-disable-next-line no-console
                 console.warn('Gaitcha: initialization failed.');
             });
@@ -118,6 +130,7 @@ function initGaitchaForm(form, endpoint, options) {
         }
         logger.destroy();
         fetcher.destroy();
+        solver.destroy();
         injector.destroy();
     }
 

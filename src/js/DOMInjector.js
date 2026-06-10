@@ -2,7 +2,9 @@
  * Injecte le widget Gaitcha dans le formulaire.
  *
  * Genere un widget stylise autonome avec :
- * - Checkbox custom avec animation (idle -> loading -> checked)
+ * - Placeholder injecte des le chargement (etat pending, non interactif)
+ *   pour annoncer le captcha et eviter tout layout shift a l'activation
+ * - Checkbox custom avec animation (pending -> idle -> loading -> checked)
  * - Label configurable
  * - Badge "gaitcha" avec shield SVG
  * - Input hidden pour le token
@@ -117,6 +119,39 @@ var WIDGET_CSS = [
     /* ── Loading state ── */
     '.gaitcha-widget--loading .gaitcha-widget__checkbox {',
     '  border-color: var(--g-accent) !important;',
+    '}',
+    '',
+
+    /* ── Pending state (placeholder avant activation) ── */
+    /* Place apres les regles hover pour les neutraliser (meme specificite + !important : l\'ordre source tranche). */
+    '.gaitcha-widget--pending {',
+    '  cursor: default;',
+    '}',
+    '',
+    '.gaitcha-widget--pending:hover {',
+    '  border-color: var(--g-border) !important;',
+    '  box-shadow: var(--g-shadow) !important;',
+    '}',
+    '',
+    '.gaitcha-widget--pending .gaitcha-widget__checkbox,',
+    '.gaitcha-widget--pending:hover .gaitcha-widget__checkbox {',
+    '  border-color: var(--g-border) !important;',
+    '  box-shadow: none !important;',
+    '  opacity: 0.6 !important;',
+    '}',
+    '',
+    '.gaitcha-widget--pending .gaitcha-widget__label {',
+    '  color: var(--g-sub) !important;',
+    '}',
+    '',
+    '.gaitcha-widget--pending:hover .gaitcha-widget__shield {',
+    '  opacity: 0.35 !important;',
+    '}',
+    '',
+    /* Pendant la resolution PoW : spinner visible meme en pending. */
+    '.gaitcha-widget--pending.gaitcha-widget--loading .gaitcha-widget__checkbox {',
+    '  border-color: var(--g-accent) !important;',
+    '  opacity: 1 !important;',
     '}',
     '',
 
@@ -425,7 +460,7 @@ function createShieldSVG() {
  * @param {HTMLFormElement}  form            Formulaire cible.
  * @param {HTMLElement|null} targetContainer Conteneur cible optionnel pour l'injection.
  * @param {string}          theme           Theme du widget : 'light' (defaut), 'dark', ou 'auto'.
- * @return {object} Injecteur avec inject(), update(), reset(), getCheckbox(), getLogInput(), onCheck(), destroy().
+ * @return {object} Injecteur avec injectPlaceholder(), setSolving(), inject(), update(), reset(), getCheckbox(), getLogInput(), onCheck(), destroy().
  */
 function createDOMInjector(form, targetContainer, theme) {
     /** @type {HTMLDivElement|null} */
@@ -440,8 +475,8 @@ function createDOMInjector(form, targetContainer, theme) {
     /** @type {HTMLInputElement|null} */
     var logInput = null;
 
-    /** @type {string} idle | loading | checked */
-    var state = 'idle';
+    /** @type {string} pending | idle | loading | checked */
+    var state = 'pending';
 
     /** @type {Array<function>} */
     var checkCallbacks = [];
@@ -457,21 +492,27 @@ function createDOMInjector(form, targetContainer, theme) {
 
 
     /**
-     * Injecte le widget dans le formulaire.
+     * Injecte le placeholder du widget des le chargement de la page.
      *
-     * @param {string} fieldName      Nom du champ aleatoire.
-     * @param {string} token          Token HMAC signe.
-     * @param {string} tokenFieldName Nom du champ hidden pour le token.
-     * @param {string} label          Label de la checkbox.
+     * Le placeholder a exactement les memes dimensions que le widget
+     * final (zero layout shift au swap) mais reste non interactif :
+     * pas de checkbox reelle, pas de champs hidden, pas de name.
+     * Il annonce la presence du captcha a l'utilisateur.
+     *
+     * @param {string} label Label de la checkbox.
      */
-    function inject(fieldName, token, tokenFieldName, label) {
+    function injectPlaceholder(label) {
+        if (widget) {
+            return;
+        }
+
         injectWidgetCSS();
 
         var labelText = label || 'Je ne suis pas un robot';
 
         // Widget container.
         widget = document.createElement('div');
-        widget.className = 'gaitcha-widget';
+        widget.className = 'gaitcha-widget gaitcha-widget--pending';
 
         // Theme : 'dark' force le dark, 'auto' suit l'OS, 'light' (defaut) = pas de classe.
         if (theme === 'dark') {
@@ -482,18 +523,11 @@ function createDOMInjector(form, targetContainer, theme) {
 
         widget.setAttribute('role', 'checkbox');
         widget.setAttribute('aria-checked', 'false');
+        widget.setAttribute('aria-disabled', 'true');
         widget.setAttribute('aria-label', labelText);
+        // Focusable des le depart : le focus clavier compte comme premier
+        // signal d'interaction et declenche l'activation du widget.
         widget.setAttribute('tabindex', '0');
-
-        // Real checkbox (hidden, for form submission only).
-        checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.name = fieldName;
-        checkbox.id = 'gaitcha-' + fieldName;
-        checkbox.className = 'gaitcha-widget__input';
-        checkbox.required = true;
-        checkbox.setAttribute('tabindex', '-1');
-        checkbox.setAttribute('aria-hidden', 'true');
 
         // Checkbox visual (standalone, vertically centered by widget flex).
         var checkboxVisual = document.createElement('div');
@@ -532,9 +566,74 @@ function createDOMInjector(form, targetContainer, theme) {
         left.appendChild(badge);
 
         // Assemble widget.
-        widget.appendChild(checkbox);
         widget.appendChild(checkboxVisual);
         widget.appendChild(left);
+
+        // Event handlers — actifs des maintenant mais inertes en etat
+        // pending (les guards sur `state` ignorent toute activation).
+        widget.addEventListener('click', handleWidgetClick);
+        widget.addEventListener('keydown', handleWidgetKeydown);
+        widget.addEventListener('touchstart', handleWidgetTouchStart, { passive: true });
+        widget.addEventListener('touchend', handleWidgetTouchEnd);
+
+        // Injecter dans le conteneur cible, ou avant le bouton submit, ou a la fin du form.
+        if (targetContainer) {
+            targetContainer.appendChild(widget);
+        } else {
+            var submitBtn = form.querySelector('[type="submit"], button:not([type])');
+            if (submitBtn) {
+                form.insertBefore(widget, submitBtn);
+            } else {
+                form.appendChild(widget);
+            }
+        }
+    }
+
+    /**
+     * Affiche ou masque l'indicateur de resolution (spinner) pendant
+     * que le client resout le challenge PoW et recupere le token.
+     *
+     * @param {boolean} active True pour afficher le spinner.
+     */
+    function setSolving(active) {
+        if (!widget || state !== 'pending') {
+            return;
+        }
+
+        widget.classList.toggle('gaitcha-widget--loading', active);
+
+        if (active) {
+            widget.setAttribute('aria-busy', 'true');
+        } else {
+            widget.removeAttribute('aria-busy');
+        }
+    }
+
+    /**
+     * Active le widget : injecte la checkbox reelle et les champs hidden.
+     *
+     * Upgrade le placeholder en place (aucun layout shift). Appele une
+     * fois le token recu du serveur, apres resolution de la PoW.
+     *
+     * @param {string} fieldName      Nom du champ aleatoire.
+     * @param {string} token          Token HMAC signe.
+     * @param {string} tokenFieldName Nom du champ hidden pour le token.
+     * @param {string} label          Label de la checkbox.
+     */
+    function inject(fieldName, token, tokenFieldName, label) {
+        if (!widget) {
+            injectPlaceholder(label);
+        }
+
+        // Real checkbox (hidden, for form submission only).
+        checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.name = fieldName;
+        checkbox.id = 'gaitcha-' + fieldName;
+        checkbox.className = 'gaitcha-widget__input';
+        checkbox.required = true;
+        checkbox.setAttribute('tabindex', '-1');
+        checkbox.setAttribute('aria-hidden', 'true');
 
         // Hidden : token signe.
         tokenInput = document.createElement('input');
@@ -548,30 +647,18 @@ function createDOMInjector(form, targetContainer, theme) {
         logInput.name = fieldName + '_log';
         logInput.value = '';
 
-        // Event handlers.
-        widget.addEventListener('click', handleWidgetClick);
-        widget.addEventListener('keydown', handleWidgetKeydown);
-        widget.addEventListener('touchstart', handleWidgetTouchStart, { passive: true });
-        widget.addEventListener('touchend', handleWidgetTouchEnd);
+        // Les inputs vivent dans le widget : ils restent dans le <form>
+        // donc soumis normalement, et partent avec lui au destroy().
+        widget.insertBefore(checkbox, widget.firstChild);
+        widget.appendChild(tokenInput);
+        widget.appendChild(logInput);
 
-        // Injecter dans le conteneur cible, ou avant le bouton submit, ou a la fin du form.
-        if (targetContainer) {
-            targetContainer.appendChild(widget);
-            targetContainer.appendChild(tokenInput);
-            targetContainer.appendChild(logInput);
-        } else {
-            var submitBtn = form.querySelector('[type="submit"], button:not([type])');
-            if (submitBtn) {
-                form.insertBefore(widget, submitBtn);
-                form.insertBefore(tokenInput, submitBtn);
-                form.insertBefore(logInput, submitBtn);
-            } else {
-                form.appendChild(widget);
-                form.appendChild(tokenInput);
-                form.appendChild(logInput);
-            }
-        }
-
+        // Sortir de l'etat pending : le widget devient interactif.
+        widget.classList.remove('gaitcha-widget--pending');
+        widget.classList.remove('gaitcha-widget--loading');
+        widget.removeAttribute('aria-disabled');
+        widget.removeAttribute('aria-busy');
+        state = 'idle';
     }
 
     /**
@@ -777,7 +864,9 @@ function createDOMInjector(form, targetContainer, theme) {
             loadingTimer = null;
         }
 
-        state = 'idle';
+        // Si le widget n'a pas encore ete active (pas de checkbox reelle),
+        // il reste en pending.
+        state = checkbox ? 'idle' : 'pending';
 
         if (widget) {
             widget.classList.remove('gaitcha-widget--loading');
@@ -864,7 +953,7 @@ function createDOMInjector(form, targetContainer, theme) {
         tokenInput = null;
         logInput = null;
         checkCallbacks = [];
-        state = 'idle';
+        state = 'pending';
     }
 
     /**
@@ -875,6 +964,8 @@ function createDOMInjector(form, targetContainer, theme) {
     }
 
     return {
+        injectPlaceholder: injectPlaceholder,
+        setSolving: setSolving,
         inject: inject,
         update: update,
         reset: reset,
