@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.0] — 2026-06-10
+
+### Added
+- `style` option (`'default'` | `'minimal'`): minimal is a sober monochrome variant — 2px radii, 1px hairline borders, no shadows, no ripple, ink-on-paper checked state — designed for editorial and high-end sites. Combines freely with all themes (light/dark/auto)
+- `data-gaitcha-theme` and `data-gaitcha-style` HTML attributes for auto-init
+
+### Changed
+- Widget CSS fully tokenized: border width, inner radius, success glow, ripple color and checkmark color are now CSS custom properties (no visual change for existing integrations)
+
 ## [0.7.0] — 2026-06-10
 
 ### Added

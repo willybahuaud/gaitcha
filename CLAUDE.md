@@ -59,7 +59,7 @@ vendor/bin/phpunit --filter testHumanMouseInteractionScoresHigh
 - **EventLogger** — buffer circulaire 30 moves, throttle 50ms, dwell time keydown/keyup, coalesced events count, screenDx/screenDy, freeze au check
 - **PoWSolver** — résout les challenges PoW : SHA-256 inline dans un Web Worker créé via Blob (fonctions auto-contenues sérialisées par toString()), fallback main thread par tranches si CSP bloque les workers
 - **AjaxFetcher** — fetch token en deux phases (résout le pow_challenge si renvoyé, max 3 tentatives) + auto-refresh à 75% du TTL (re-résout une PoW à chaque refresh)
-- **DOMInjector** — placeholder pending au chargement, puis upgrade en place : checkbox visible + label + hidden fields (_ct, _log) dans le widget
+- **DOMInjector** — placeholder pending au chargement, puis upgrade en place : checkbox visible + label + hidden fields (_ct, _log) dans le widget. Themes light/dark/auto x styles default/minimal via CSS custom properties
 - **LogSerializer** — sérialise le payload au submit
 
 ### Demo — `demo/`
