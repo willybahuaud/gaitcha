@@ -122,10 +122,19 @@
 
 <div id="result3"></div>
 
+<h2>Formulaire 4 (style minimal)</h2>
+<form id="form4" data-gaitcha data-gaitcha-endpoint="/captcha/init" data-gaitcha-style="minimal" action="/submit" method="POST">
+    <label for="fullname">Nom complet</label>
+    <input type="text" id="fullname" name="fullname" placeholder="Jeanne Martin" required>
+    <button type="submit">Envoyer</button>
+</form>
+
+<div id="result4"></div>
+
 <script src="/gaitcha.min.js"></script>
 <script>
     document.querySelectorAll('form').forEach(function setupForm(form) {
-        var resultIds = { form1: 'result', form2: 'result2', form3: 'result3' };
+        var resultIds = { form1: 'result', form2: 'result2', form3: 'result3', form4: 'result4' };
         var resultId = resultIds[form.id] || 'result';
 
         form.addEventListener('submit', function handleSubmit(e) {

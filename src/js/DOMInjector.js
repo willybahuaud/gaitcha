@@ -57,6 +57,7 @@ var WIDGET_CSS = [
     '  --g-checkbox-bg: #ffffff;',
     '  --g-border: #e2e6ea;',
     '  --g-border-hover: #c8cdd3;',
+    '  --g-border-width: 1.5px;',
     '  --g-accent: #3d7df6;',
     '  --g-accent-light: #eef3ff;',
     '  --g-text: #1a1d23;',
@@ -65,14 +66,18 @@ var WIDGET_CSS = [
     '  --g-success-light: #f0fdf4;',
     '  --g-success-border: #d1fae5;',
     '  --g-success-text: #15803d;',
+    '  --g-success-glow: 0 0 0 3px rgba(34,197,94,0.15);',
+    '  --g-checkmark: #ffffff;',
+    '  --g-ripple: rgba(61, 125, 246, 0.12);',
     '  --g-shadow: 0 1px 3px rgba(0,0,0,0.07), 0 4px 12px rgba(0,0,0,0.05);',
     '  --g-shadow-hover: 0 2px 6px rgba(0,0,0,0.09), 0 8px 20px rgba(0,0,0,0.07);',
     '  --g-radius: 10px;',
+    '  --g-radius-inner: 5px;',
     '  --g-transition: 200ms cubic-bezier(0.4, 0, 0.2, 1);',
     '',
     '  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;',
     '  background: var(--g-bg) !important;',
-    '  border: 1.5px solid var(--g-border) !important;',
+    '  border: var(--g-border-width) solid var(--g-border) !important;',
     '  border-radius: var(--g-radius) !important;',
     '  box-shadow: var(--g-shadow) !important;',
     '  padding: 14px 16px 12px !important;',
@@ -165,7 +170,7 @@ var WIDGET_CSS = [
     '.gaitcha-widget--checked .gaitcha-widget__checkbox {',
     '  background: var(--g-success) !important;',
     '  border-color: var(--g-success) !important;',
-    '  box-shadow: 0 0 0 3px rgba(34,197,94,0.15) !important;',
+    '  box-shadow: var(--g-success-glow) !important;',
     '}',
     '',
     '.gaitcha-widget--checked .gaitcha-widget__checkmark {',
@@ -225,8 +230,8 @@ var WIDGET_CSS = [
     '  width: 22px !important;',
     '  height: 22px !important;',
     '  min-width: 22px !important;',
-    '  border-radius: 5px !important;',
-    '  border: 1.5px solid var(--g-border) !important;',
+    '  border-radius: var(--g-radius-inner) !important;',
+    '  border: var(--g-border-width) solid var(--g-border) !important;',
     '  background: var(--g-checkbox-bg) !important;',
     '  position: relative !important;',
     '  transition: border-color var(--g-transition), background var(--g-transition), box-shadow var(--g-transition);',
@@ -261,6 +266,12 @@ var WIDGET_CSS = [
     '  opacity: 0;',
     '  transform: scale(0.5);',
     '  transition: opacity 200ms, transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1);',
+    '}',
+    '',
+    /* La propriete CSS stroke prime sur l'attribut SVG — permet au style
+       minimal dark d'inverser le checkmark (noir sur case blanche). */
+    '.gaitcha-widget__checkmark path {',
+    '  stroke: var(--g-checkmark) !important;',
     '}',
     '',
 
@@ -339,7 +350,7 @@ var WIDGET_CSS = [
     '.gaitcha-widget__ripple {',
     '  position: absolute !important;',
     '  border-radius: 50% !important;',
-    '  background: rgba(61, 125, 246, 0.12) !important;',
+    '  background: var(--g-ripple) !important;',
     '  transform: scale(0);',
     '  animation: gaitcha-ripple 500ms ease-out forwards;',
     '  pointer-events: none !important;',
@@ -383,6 +394,71 @@ var WIDGET_CSS = [
     '    --g-success-light: rgba(34,197,94,0.07);',
     '    --g-success-border: rgba(34,197,94,0.3);',
     '    --g-success-text: #4ade80;',
+    '  }',
+    '}',
+    '',
+
+    /* ── Style minimal (sobre, sans couleurs ni ombres — sites edito/luxe) ──
+       Place apres les blocs dark/auto : les selecteurs combines (2 classes)
+       gagnent la cascade sur les blocs theme (1 classe). */
+    '.gaitcha-widget--minimal {',
+    '  --g-border: #1a1a1a;',
+    '  --g-border-hover: #000000;',
+    '  --g-border-width: 1px;',
+    '  --g-accent: #1a1a1a;',
+    '  --g-accent-light: transparent;',
+    '  --g-success: #1a1a1a;',
+    '  --g-success-light: #fafafa;',
+    '  --g-success-border: #1a1a1a;',
+    '  --g-success-text: #1a1a1a;',
+    '  --g-success-glow: none;',
+    '  --g-ripple: transparent;',
+    '  --g-shadow: none;',
+    '  --g-shadow-hover: none;',
+    '  --g-radius: 2px;',
+    '  --g-radius-inner: 2px;',
+    '}',
+    '',
+    /* Le brand reste lisible sur le fond checked (light ET dark). */
+    '.gaitcha-widget--minimal.gaitcha-widget--checked .gaitcha-widget__brand {',
+    '  color: var(--g-success-text) !important;',
+    '  opacity: 0.6;',
+    '}',
+    '',
+
+    /* ── Style minimal + dark (force) ── */
+    '.gaitcha-widget--minimal.gaitcha-widget--dark {',
+    '  --g-bg: #0a0a0a;',
+    '  --g-checkbox-bg: #0a0a0a;',
+    '  --g-border: #3a3a3a;',
+    '  --g-border-hover: #f5f5f5;',
+    '  --g-accent: #f5f5f5;',
+    '  --g-accent-light: transparent;',
+    '  --g-text: #f5f5f5;',
+    '  --g-sub: #6a6a6a;',
+    '  --g-success: #f5f5f5;',
+    '  --g-success-light: #161616;',
+    '  --g-success-border: #f5f5f5;',
+    '  --g-success-text: #f5f5f5;',
+    '  --g-checkmark: #0a0a0a;',
+    '}',
+    '',
+    /* ── Style minimal + dark (auto, suit l'OS) ── */
+    '@media (prefers-color-scheme: dark) {',
+    '  .gaitcha-widget--minimal.gaitcha-widget--auto {',
+    '    --g-bg: #0a0a0a;',
+    '    --g-checkbox-bg: #0a0a0a;',
+    '    --g-border: #3a3a3a;',
+    '    --g-border-hover: #f5f5f5;',
+    '    --g-accent: #f5f5f5;',
+    '    --g-accent-light: transparent;',
+    '    --g-text: #f5f5f5;',
+    '    --g-sub: #6a6a6a;',
+    '    --g-success: #f5f5f5;',
+    '    --g-success-light: #161616;',
+    '    --g-success-border: #f5f5f5;',
+    '    --g-success-text: #f5f5f5;',
+    '    --g-checkmark: #0a0a0a;',
     '  }',
     '}',
 ].join('\n');
@@ -460,9 +536,10 @@ function createShieldSVG() {
  * @param {HTMLFormElement}  form            Formulaire cible.
  * @param {HTMLElement|null} targetContainer Conteneur cible optionnel pour l'injection.
  * @param {string}          theme           Theme du widget : 'light' (defaut), 'dark', ou 'auto'.
+ * @param {string}          style           Style du widget : 'default' ou 'minimal' (sobre, sans couleurs).
  * @return {object} Injecteur avec injectPlaceholder(), setSolving(), inject(), update(), reset(), getCheckbox(), getLogInput(), onCheck(), destroy().
  */
-function createDOMInjector(form, targetContainer, theme) {
+function createDOMInjector(form, targetContainer, theme, style) {
     /** @type {HTMLDivElement|null} */
     var widget = null;
 
@@ -519,6 +596,11 @@ function createDOMInjector(form, targetContainer, theme) {
             widget.classList.add('gaitcha-widget--dark');
         } else if (theme === 'auto') {
             widget.classList.add('gaitcha-widget--auto');
+        }
+
+        // Style : 'minimal' = sobre monochrome. Toute autre valeur = defaut.
+        if (style === 'minimal') {
+            widget.classList.add('gaitcha-widget--minimal');
         }
 
         widget.setAttribute('role', 'checkbox');

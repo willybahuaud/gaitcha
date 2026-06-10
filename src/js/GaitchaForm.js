@@ -21,17 +21,20 @@ import { attachSubmitSerializer } from './LogSerializer.js';
  * @param {object}          options            Options optionnelles.
  * @param {string}          options.label      Label de la checkbox.
  * @param {HTMLElement}     options.container  Conteneur cible pour l'injection DOM.
+ * @param {string}          options.theme      Theme du widget : 'light' (defaut), 'dark', ou 'auto'.
+ * @param {string}          options.style      Style du widget : 'default' ou 'minimal'.
  * @return {object} Instance avec destroy() et reset().
  */
 function initGaitchaForm(form, endpoint, options) {
     const label = (options && options.label) || 'Je ne suis pas un robot';
     const targetContainer = (options && options.container) || null;
     const theme = (options && options.theme) || 'light';
+    const style = (options && options.style) || 'default';
 
     const logger = createEventLogger(form);
     const solver = createPoWSolver();
     const fetcher = createAjaxFetcher(endpoint, solver);
-    const injector = createDOMInjector(form, targetContainer, theme);
+    const injector = createDOMInjector(form, targetContainer, theme, style);
 
     let detectorCleanup = null;
     let serializerCleanup = null;

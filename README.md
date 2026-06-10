@@ -96,6 +96,7 @@ const instance = Gaitcha.init(document.querySelector('#my-form'), '/captcha/init
     label: 'I am not a robot',
     container: document.getElementById('captcha-slot'), // optional target element
     theme: 'auto', // 'light' (default), 'dark', or 'auto' (follows OS preference)
+    style: 'minimal', // 'default' or 'minimal' (sober monochrome, no shadows)
 });
 ```
 
@@ -126,13 +127,24 @@ A placeholder version is injected as soon as the page loads: same dimensions as 
 
 ### Theming
 
-Three modes, set via the `theme` option in `Gaitcha.init()` (not available as an HTML attribute — auto-init always uses `light`):
+Two orthogonal axes: **theme** (ambiance) and **style** (visual language). Both available as `Gaitcha.init()` options or as HTML attributes (`data-gaitcha-theme`, `data-gaitcha-style`).
+
+**Theme:**
 
 | Value | Behavior |
 |---|---|
 | `'light'` | Light background (default) |
 | `'dark'` | Dark background, forced |
 | `'auto'` | Follows OS preference via `prefers-color-scheme` |
+
+**Style:**
+
+| Value | Behavior |
+|---|---|
+| `'default'` | Soft radii, subtle shadows, blue accent, green success state |
+| `'minimal'` | Sober monochrome: 2px radii, 1px hairline borders, no shadows, no ripple, ink-on-paper checked state. Designed to blend into editorial and high-end sites |
+
+The two combine freely — `minimal` + `dark` gives a deep-ink widget with an inverted (white box, dark check) checked state.
 
 All CSS variables are scoped to `.gaitcha-widget` (no `:root` pollution). Every property uses `!important` to survive third-party form plugin CSS that tends to override everything.
 
@@ -220,6 +232,8 @@ $config = new Config([
 | `data-gaitcha-endpoint` | Init endpoint URL (default: `/captcha/init`) |
 | `data-gaitcha-label` | Checkbox label (default: "Je ne suis pas un robot") |
 | `data-gaitcha-container` | ID of a DOM element where the checkbox should be injected |
+| `data-gaitcha-theme` | Widget theme: `light` (default), `dark`, or `auto` |
+| `data-gaitcha-style` | Widget style: `default` or `minimal` |
 
 ## Limits
 

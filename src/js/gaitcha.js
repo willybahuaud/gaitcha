@@ -47,7 +47,8 @@ function isSameOrigin(url) {
  * @param {object}          options            Options optionnelles.
  * @param {string}          options.label      Label de la checkbox.
  * @param {HTMLElement}     options.container  Conteneur cible pour l'injection DOM.
- * @param {string}          options.theme     Theme du widget : 'light' (defaut), 'dark', ou 'auto'.
+ * @param {string}          options.theme      Theme du widget : 'light' (defaut), 'dark', ou 'auto'.
+ * @param {string}          options.style      Style du widget : 'default' (defaut) ou 'minimal' (sobre monochrome).
  * @return {object|null} Instance avec destroy(), ou null si refusé.
  */
 function init(form, endpoint, options) {
@@ -110,8 +111,10 @@ function autoInit() {
         var label = form.getAttribute('data-gaitcha-label') || undefined;
         var containerId = form.getAttribute('data-gaitcha-container') || undefined;
         var container = containerId ? document.getElementById(containerId) : undefined;
+        var theme = form.getAttribute('data-gaitcha-theme') || undefined;
+        var style = form.getAttribute('data-gaitcha-style') || undefined;
 
-        init(form, endpoint, { label: label, container: container });
+        init(form, endpoint, { label: label, container: container, theme: theme, style: style });
     });
 }
 
