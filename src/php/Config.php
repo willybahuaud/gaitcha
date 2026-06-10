@@ -39,6 +39,15 @@ class Config
     /** @var TokenStoreInterface|null Store pour l'anti-replay. */
     private ?TokenStoreInterface $tokenStore;
 
+    /** @var bool Exige une preuve d'effort (PoW) avant d'émettre un token. */
+    private bool $pow;
+
+    /** @var int Difficulté PoW en bits de zéros attendus (8 à 26). */
+    private int $powDifficulty;
+
+    /** @var int Durée de validité d'un challenge PoW en secondes. */
+    private int $powChallengeTtl;
+
     /**
      * @param array<string, mixed> $options {
      *     @type string $secret          Clé secrète HMAC (obligatoire).
@@ -50,6 +59,9 @@ class Config
      *     @type string $field_prefix    Préfixe des champs générés (défaut : '_gc_').
      *     @type bool   $anti_replay     Activer l'anti-replay (défaut : false).
      *     @type TokenStoreInterface $token_store Store anti-replay (défaut : null).
+     *     @type bool   $pow              Exiger une preuve d'effort avant l'init (défaut : false).
+     *     @type int    $pow_difficulty   Difficulté PoW en bits (défaut : 18, bornes 8–26).
+     *     @type int    $pow_challenge_ttl Durée de validité d'un challenge en secondes (défaut : 90).
      * }
      */
     public function __construct(array $options)
@@ -67,6 +79,9 @@ class Config
         $this->fieldPrefix    = $options['field_prefix'] ?? '_gc_';
         $this->antiReplay     = (bool) ($options['anti_replay'] ?? false);
         $this->tokenStore     = $options['token_store'] ?? null;
+        $this->pow             = (bool) ($options['pow'] ?? false);
+        $this->powDifficulty   = (int) ($options['pow_difficulty'] ?? 18);
+        $this->powChallengeTtl = (int) ($options['pow_challenge_ttl'] ?? 90);
 
         if ($this->ttl < 1) {
             throw new \InvalidArgumentException('Gaitcha: ttl must be a positive integer.');
@@ -90,6 +105,14 @@ class Config
 
         if ($this->antiReplay && $this->tokenStore === null) {
             throw new \InvalidArgumentException('Gaitcha: token_store is required when anti_replay is enabled.');
+        }
+
+        if ($this->powDifficulty < 8 || $this->powDifficulty > 26) {
+            throw new \InvalidArgumentException('Gaitcha: pow_difficulty must be between 8 and 26.');
+        }
+
+        if ($this->powChallengeTtl < 10) {
+            throw new \InvalidArgumentException('Gaitcha: pow_challenge_ttl must be at least 10 seconds.');
         }
     }
 
@@ -163,5 +186,29 @@ class Config
     public function getTokenStore(): ?TokenStoreInterface
     {
         return $this->tokenStore;
+    }
+
+    /**
+     * @return bool True si la preuve d'effort est exigée avant l'init.
+     */
+    public function isPow(): bool
+    {
+        return $this->pow;
+    }
+
+    /**
+     * @return int Difficulté PoW en bits de zéros attendus.
+     */
+    public function getPowDifficulty(): int
+    {
+        return $this->powDifficulty;
+    }
+
+    /**
+     * @return int Durée de validité d'un challenge PoW en secondes.
+     */
+    public function getPowChallengeTtl(): int
+    {
+        return $this->powChallengeTtl;
     }
 }

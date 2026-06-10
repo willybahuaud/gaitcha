@@ -100,4 +100,48 @@ class ConfigTest extends TestCase
         $this->expectExceptionMessage('token_store is required');
         new Config(['secret' => 'test-secret-key-for-gaitcha-unit-tests!', 'anti_replay' => true]);
     }
+
+    public function testPowDefaults(): void
+    {
+        $config = new Config(['secret' => 'test-secret-key-for-gaitcha-unit-tests!']);
+
+        $this->assertFalse($config->isPow());
+        $this->assertSame(18, $config->getPowDifficulty());
+        $this->assertSame(90, $config->getPowChallengeTtl());
+    }
+
+    public function testPowOptions(): void
+    {
+        $config = new Config([
+            'secret'            => 'test-secret-key-for-gaitcha-unit-tests!',
+            'pow'               => true,
+            'pow_difficulty'    => 20,
+            'pow_challenge_ttl' => 60,
+        ]);
+
+        $this->assertTrue($config->isPow());
+        $this->assertSame(20, $config->getPowDifficulty());
+        $this->assertSame(60, $config->getPowChallengeTtl());
+    }
+
+    public function testRejectsPowDifficultyTooLow(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('pow_difficulty must be between 8 and 26');
+        new Config(['secret' => 'test-secret-key-for-gaitcha-unit-tests!', 'pow_difficulty' => 7]);
+    }
+
+    public function testRejectsPowDifficultyTooHigh(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('pow_difficulty must be between 8 and 26');
+        new Config(['secret' => 'test-secret-key-for-gaitcha-unit-tests!', 'pow_difficulty' => 27]);
+    }
+
+    public function testRejectsTooShortPowChallengeTtl(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('pow_challenge_ttl must be at least 10 seconds');
+        new Config(['secret' => 'test-secret-key-for-gaitcha-unit-tests!', 'pow_challenge_ttl' => 5]);
+    }
 }
