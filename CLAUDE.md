@@ -7,8 +7,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Gaitcha est un captcha self-hosted, sans dépendance externe. Il combine :
 - **Analyse comportementale** (trajectoire souris, timing tabs, offset clic) pour scorer l'humanité de l'utilisateur
 - **Checkbox visible à name aléatoire** chargée en Ajax après un premier signal d'interaction
+- **Placeholder injecté au chargement** : mêmes dimensions que le widget final (zéro layout shift), non interactif, n'expose ni name ni token
+- **Preuve d'effort (PoW) opt-in** : challenge HMAC signé à résoudre (Web Worker) avant que le serveur n'émette un token — rend coûteux le harvesting massif
 - **Token HMAC signé** (name + timestamp + signature) pour une validation stateless
-- **Anti-replay optionnel** : stockage des tokens soumis pendant le TTL
+- **Anti-replay optionnel** : stockage des tokens soumis pendant le TTL (consomme aussi les nonces PoW)
 
 Le core est framework-agnostic. L'intégration WordPress et les adaptateurs (CF7, Gravity, WS Form) sont hors scope v1.
 
@@ -45,7 +47,9 @@ vendor/bin/phpunit --filter testHumanMouseInteractionScoresHigh
 - **ValidationOrchestrator** — pipeline complet : token → anti-replay → parse log → scoring → résultat
 - **ValidationResult** — value object immutable (status, reason, score, debug)
 - **TokenStoreInterface / FileTokenStore** — anti-replay opt-in avec `checkAndAdd()` atomique
-- **AbstractEndpoint** — classe abstraite pour l'endpoint Ajax init
+- **PoWChallengeGenerator** — challenge PoW stateless (nonce + difficulté + expiration, signés HMAC)
+- **PoWVerifier** — vérifie forme → signature → expiration → difficulté → replay du nonce
+- **AbstractEndpoint** — endpoint Ajax init en deux phases : sans preuve valide → `{ pow_challenge }`, avec preuve → payload init (exige le body JSON décodé quand `pow` est actif)
 
 ### JS Core — `src/js/` (bundle → `dist/gaitcha.min.js`)
 
@@ -53,8 +57,9 @@ vendor/bin/phpunit --filter testHumanMouseInteractionScoresHigh
 - **GaitchaForm** — orchestre tout pour un formulaire (une instance par form)
 - **InteractionDetector** — premier signal (mousemove, touchstart, focus, keydown)
 - **EventLogger** — buffer circulaire 30 moves, throttle 50ms, dwell time keydown/keyup, coalesced events count, screenDx/screenDy, freeze au check
-- **AjaxFetcher** — fetch token + auto-refresh à 75% du TTL
-- **DOMInjector** — injecte checkbox visible + label + hidden fields (_ct, _log)
+- **PoWSolver** — résout les challenges PoW : SHA-256 inline dans un Web Worker créé via Blob (fonctions auto-contenues sérialisées par toString()), fallback main thread par tranches si CSP bloque les workers
+- **AjaxFetcher** — fetch token en deux phases (résout le pow_challenge si renvoyé, max 3 tentatives) + auto-refresh à 75% du TTL (re-résout une PoW à chaque refresh)
+- **DOMInjector** — placeholder pending au chargement, puis upgrade en place : checkbox visible + label + hidden fields (_ct, _log) dans le widget
 - **LogSerializer** — sérialise le payload au submit
 
 ### Demo — `demo/`
@@ -81,11 +86,13 @@ mais un profil secondaire est scoré si des données existent. Score final = max
 
 ## Flux
 
-1. Page chargée → formulaire nu
-2. Premier signal d'interaction → Ajax `/captcha/init` → injection checkbox + `_ct` + `_log`
-3. Events collectés dans buffer circulaire, gelés au check de la checkbox
-4. Submit → log sérialisé → POST : champs form + `_ct` + `[name]` + `[name]_log`
-5. Serveur : token → anti-replay → parse log → score → accept/reject
+1. Page chargée → placeholder injecté (état pending, non interactif, rien à scraper)
+2. Premier signal d'interaction → collecte d'events démarrée + Ajax `/captcha/init`
+3. Si `pow` actif : réponse `{ pow_challenge }` → résolution en Web Worker → nouvel appel init avec `{ pow: { ...challenge, solution } }`
+4. Réponse init → upgrade du placeholder en place : checkbox + `_ct` + `_log`
+5. Events collectés dans buffer circulaire, gelés au check de la checkbox
+6. Submit → log sérialisé → POST : champs form + `_ct` + `[name]` + `[name]_log`
+7. Serveur : token → anti-replay → parse log → score → accept/reject
 
 ## Conventions de code
 
