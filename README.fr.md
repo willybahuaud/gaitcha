@@ -2,17 +2,11 @@
 
 [English](README.md) · Français
 
-Gaitcha est un captcha comportemental auto-hébergé pour PHP et JavaScript. Le client collecte les interactions à la souris, au clavier ou au tactile autour d'une case à cocher. Ton serveur contrôle un jeton signé et évalue le journal reçu. Tu peux aussi exiger une preuve de travail avant de délivrer un jeton.
+Gaitcha est un captcha comportemental auto-hébergé pour PHP et JavaScript. Le visiteur coche une case ; ton serveur évalue les interactions à la souris, au clavier ou au tactile autour de celle-ci. Aucune grille d'images à résoudre, aucun compte à créer auprès d'un fournisseur de captcha.
+
+La bibliothèque PHP gère les jetons et le score comportemental. Tu la branches sur tes formulaires et tu peux activer une preuve de travail pour ajouter un coût de calcul aux demandes de jetons. Les données d'interaction sont envoyées à ton serveur, sans passer par un fournisseur de captcha.
 
 [Site](https://gaitcha.com/fr/) · [Démo](https://gaitcha.com/fr/#try-it) · [Guide PHP](https://gaitcha.com/fr/docs/) · [Extension WordPress](https://gaitcha.com/fr/wordpress/)
-
-## Ce qui est vérifié
-
-Le moteur PHP examine les mouvements, les délais et les séquences d'interaction. Il peut rejeter une soumission dont les données de vérification manquent ou dont le journal ne satisfait pas ses règles. La vérification se fait sur ton serveur, sans API de captcha tierce ni compte auprès d'un service externe.
-
-Le journal vient du client. Un script peut demander un jeton, résoudre la preuve de travail si elle est active, puis envoyer des interactions fabriquées. Il n'a pas besoin d'exécuter un navigateur. La signature protège le jeton ; elle ne prouve pas que les gestes déclarés ont eu lieu.
-
-La preuve de travail ajoute du calcul à l'obtention des jetons. Elle ne prouve pas qu'un visiteur est humain. Aucun taux de détection n'est publié pour Gaitcha. Teste-le avec ton trafic, conserve la limitation de débit et la validation habituelle des formulaires, et prévois une nouvelle tentative en cas de rejet d'un visiteur légitime.
 
 ## Installation
 
@@ -149,7 +143,7 @@ L'extension WordPress active la preuve de travail et l'anti-rejeu par défaut. S
 
 Le widget apparaît d'abord sous forme d'un emplacement non interactif. Un mouvement, un toucher, un focus ou une activité clavier lance l'initialisation. La case devient interactive quand le jeton est disponible. Le client capture le journal au moment où le visiteur la coche.
 
-Le moteur distingue les profils souris, clavier et tactile. Il utilise les changements de trajectoire, les variations de vitesse, les délais au clavier et les caractéristiques tactiles disponibles. Ces heuristiques peuvent aussi rejeter des interactions légitimes. Teste tes formulaires au clavier, sur mobile et avec les technologies d'assistance utilisées par ton public.
+Le moteur distingue les profils souris, clavier et tactile. Il utilise les changements de trajectoire, les variations de vitesse, les délais au clavier et les caractéristiques tactiles disponibles.
 
 L'apparence se règle indépendamment du score :
 
@@ -184,9 +178,15 @@ const instance = Gaitcha.init(form, '/captcha/init', {
 
 Les interactions transitent du navigateur vers ton serveur. Le client ne pose pas de cookies de suivi et ne crée pas d'empreinte persistante du visiteur. L'anti-rejeu utilise un état temporaire ; les logs de ton hébergeur et de ton application sont distincts. Voir le [parcours des données](https://gaitcha.com/fr/privacy/).
 
-JavaScript est nécessaire par défaut. `no_js_fallback: 'allow'` ignore la vérification quand le jeton manque, y compris pour des soumissions automatisées directes. Ce réglage ne permet pas de savoir pourquoi le jeton est absent.
+JavaScript est nécessaire par défaut. `no_js_fallback: 'allow'` accepte les soumissions sans jeton, y compris automatisées. Garde `'reject'` si chaque envoi doit passer la vérification.
 
 Les motifs de rejet incluent `token_absent`, `token_invalid`, `token_expired`, `token_already_used`, `score_insufficient` et `log_malformed`. Avant de modifier le seuil, vérifie l'expiration du jeton, les champs envoyés et la sérialisation AJAX. [Guide de dépannage](https://gaitcha.com/fr/guides/troubleshooting/).
+
+## Limites
+
+Les données d'interaction côté client peuvent être fabriquées : une automatisation conçue pour Gaitcha peut donc passer la vérification. La preuve de travail ajoute un coût de calcul ; elle ne prouve pas que le visiteur est humain. Utilise Gaitcha avec une limitation de débit et la validation habituelle de ton application.
+
+Avant la mise en ligne, teste tes formulaires au clavier, sur mobile et avec les technologies d'assistance. Prévois une nouvelle tentative lorsqu'un envoi est rejeté.
 
 ## Développement
 

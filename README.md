@@ -2,17 +2,11 @@
 
 English · [Français](README.fr.md)
 
-Gaitcha is a self-hosted behavioral captcha for PHP and JavaScript. The client collects mouse, keyboard or touch interactions around a checkbox. Your server checks a signed token and scores the interaction log. You can also require proof of work before issuing a token.
+Gaitcha is a self-hosted behavioral captcha for PHP and JavaScript. Visitors check a box; your server evaluates the mouse, keyboard or touch interactions around it. There are no image puzzles to solve and no third-party captcha account to set up.
+
+The PHP library handles token verification and behavioral scoring. You connect it to your forms and can enable proof of work to add a computational cost to token requests. Interaction data goes to your server, without passing through a captcha provider.
 
 [Website](https://gaitcha.com/) · [Live demo](https://gaitcha.com/#try-it) · [PHP guide](https://gaitcha.com/docs/) · [WordPress plugin](https://gaitcha.com/wordpress/)
-
-## What it checks
-
-The PHP scorer looks at movement, timing and interaction patterns. It can reject missing verification data and logs that fail its rules. Verification runs on your server, without a third-party captcha API or an external service account.
-
-The log comes from the client. A script can request a token, solve a proof-of-work challenge when required, and submit fabricated interaction data. It does not need to run a browser. The token signature protects the token; it does not establish that the reported gestures happened.
-
-Proof of work adds computation to obtaining tokens. It does not prove that a visitor is human. There is no published detection rate for Gaitcha. Test it with your traffic, keep rate limiting and normal form validation, and provide a retry when a legitimate visitor gets rejected.
 
 ## Install
 
@@ -149,7 +143,7 @@ The WordPress plugin enables proof of work and anti-replay by default. These are
 
 The widget first appears as a non-interactive placeholder. Mouse, touch, focus or keyboard activity starts initialization. Once the token is available, the checkbox becomes interactive. The client captures the interaction log when the visitor checks it.
 
-The scorer has mouse, keyboard and touch profiles. It uses signals such as trajectory changes, speed variation, key timing and available touch characteristics. These are heuristics; they can also reject legitimate interactions. Test keyboard use, assistive technology and mobile devices with your forms.
+The scorer has mouse, keyboard and touch profiles. It uses signals such as trajectory changes, speed variation, key timing and available touch characteristics.
 
 Choose the appearance independently of the scoring:
 
@@ -184,9 +178,15 @@ const instance = Gaitcha.init(form, '/captcha/init', {
 
 Interaction data travels from the visitor's browser to your server. The client does not set tracking cookies or create a persistent visitor fingerprint. Anti-replay requires temporary state; hosting and application logs are separate. See [the data flow](https://gaitcha.com/privacy/).
 
-JavaScript is required by default. `no_js_fallback: 'allow'` bypasses captcha verification when the token is missing, including direct automated submissions. It cannot identify why the token is absent.
+JavaScript is required by default. `no_js_fallback: 'allow'` accepts submissions without a token, including automated submissions. Keep `'reject'` if every submission must pass verification.
 
 Rejection reasons include `token_absent`, `token_invalid`, `token_expired`, `token_already_used`, `score_insufficient` and `log_malformed`. Before changing the threshold, check token expiry, request fields and AJAX serialization. [Troubleshooting guide](https://gaitcha.com/guides/troubleshooting/).
+
+## Limits
+
+Client-side interaction data can be fabricated, so targeted automation can still pass verification. Proof of work adds computational cost; it does not prove that a visitor is human. Use Gaitcha alongside rate limiting and your application's usual validation.
+
+Before launch, test your forms with keyboard navigation, mobile devices and assistive technology. Provide a retry when a submission is rejected.
 
 ## Development
 
