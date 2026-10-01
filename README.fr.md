@@ -100,6 +100,31 @@ if ($result->isAccepted()) {
 
 Cet exemple minimal utilise les réglages du core : **preuve de travail et anti-rejeu désactivés**. Le [guide d'intégration PHP](https://gaitcha.com/fr/docs/) propose une configuration partagée avec les deux options actives et un stockage hors du dossier public.
 
+## Fonctionnement
+
+Gaitcha associe un score comportemental, des jetons signés à durée limitée et une preuve de travail optionnelle. Le client JavaScript gère le widget et collecte les interactions ; PHP prend la décision de vérification.
+
+### Du chargement de la page à l'envoi
+
+1. **Le formulaire affiche un emplacement réservé.** Il garde la place du widget, sans jeton ni nom de champ aléatoire. La case n'est pas encore interactive.
+2. **La première interaction lance l'initialisation.** Un mouvement de souris, un toucher, un focus ou une activité clavier démarre la collecte des événements et appelle ton endpoint.
+3. **La preuve de travail se calcule si elle est active.** Le serveur renvoie un challenge SHA-256 signé. Un Web Worker le résout en arrière-plan, puis le client envoie la solution au même endpoint. Les interactions continuent d'être collectées pendant le calcul.
+4. **Le serveur délivre un jeton.** La réponse contient un jeton signé par HMAC et un nom de champ aléatoire. L'emplacement réservé devient la case interactive, au même endroit.
+5. **Cocher la case capture le journal.** Le client fige les interactions enregistrées et les écrit immédiatement dans un champ caché, prêt pour un envoi classique ou une sérialisation AJAX.
+6. **PHP valide la soumission.** Le serveur contrôle la signature et l'expiration du jeton, lit le journal et compare son score comportemental à `score_threshold` (`0.5` par défaut). Ton application reçoit le résultat avant de traiter le formulaire.
+
+### Ce que le moteur évalue
+
+L'événement qui coche la case détermine le profil principal :
+
+- **Souris :** forme de la trajectoire, décalage du clic, variations de vitesse, petits changements d'angle, inversions de direction et ralentissement près de la case. Le moteur examine aussi l'autocorrélation de la vitesse, les événements de pointeur regroupés et l'écart entre coordonnées écran et coordonnées client.
+- **Clavier :** navigation avec Tab et Shift+Tab, délai entre focus et activation, durée des appuis, chevauchement des touches et variation des intervalles entre événements.
+- **Tactile :** mouvement et décalage du toucher, puis pression, rayon de contact et durée de l'appui quand l'appareil les fournit. Les poids sont redistribués lorsque certains signaux tactiles manquent.
+
+Certaines règles mettent directement le score à zéro : une interaction de moins de 100 ms, un clic souris sans mouvement enregistré, ou un clic ou toucher déclaré exactement au centre de la case. Un score nul sur le profil principal arrête l'évaluation. Sinon, si les données suffisent pour un profil secondaire souris ou clavier, le meilleur score est conservé.
+
+Active `debug` pour consulter le profil retenu et le détail des signaux avec `$result->getDebug()` pendant tes tests d'intégration. Le contrôle du jeton et le calcul du score se font localement, sans API captcha externe.
+
 ## Preuve de travail et configuration
 
 Pour activer la preuve de travail, passe `pow` à `true` dans la configuration de l'endpoint. Le premier appel reçoit un challenge SHA-256 signé. Le client le résout, puis envoie sa solution pour obtenir un jeton. Le client fourni gère ces échanges.
@@ -141,9 +166,7 @@ L'extension WordPress active la preuve de travail et l'anti-rejeu par défaut. S
 
 ## Widget et styles
 
-Le widget apparaît d'abord sous forme d'un emplacement non interactif. Un mouvement, un toucher, un focus ou une activité clavier lance l'initialisation. La case devient interactive quand le jeton est disponible. Le client capture le journal au moment où le visiteur la coche.
-
-Le moteur distingue les profils souris, clavier et tactile. Il utilise les changements de trajectoire, les variations de vitesse, les délais au clavier et les caractéristiques tactiles disponibles.
+Le widget comprend la case, les états de chargement et de validation, le badge Gaitcha et les champs cachés de vérification. Il s'adapte à son conteneur jusqu'à 260 px de large ; dans les espaces étroits, le badge passe à une version compacte grâce à une container query CSS.
 
 L'apparence se règle indépendamment du score :
 
@@ -171,6 +194,8 @@ const instance = Gaitcha.init(form, '/captcha/init', {
     style: 'minimal',
 });
 ```
+
+Utilise l'option `container` pour placer le widget dans un élément précis, par exemple `container: document.getElementById('captcha-slot')`.
 
 `instance.reset()` décoche le widget, vide le journal et demande un nouveau jeton. Utilise-le après un rejet en AJAX pour permettre une nouvelle tentative. `Gaitcha.reset(form)` réinitialise aussi un formulaire déjà branché. `instance.destroy()` retire le widget et les écouteurs de l'instance.
 

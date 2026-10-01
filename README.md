@@ -100,6 +100,31 @@ if ($result->isAccepted()) {
 
 This minimal example uses the core defaults: **proof of work and anti-replay are off**. The [PHP integration guide](https://gaitcha.com/docs/) shows a shared configuration with both enabled and storage outside the public directory.
 
+## How it works
+
+Gaitcha combines behavioral scoring with signed, time-limited tokens and optional proof of work. The JavaScript client handles the widget and collects interactions; PHP makes the verification decision.
+
+### From page load to submission
+
+1. **The form displays a placeholder.** It reserves space for the widget without a token or random field name. The checkbox is not interactive yet.
+2. **The first interaction starts initialization.** Mouse movement, touch, focus or keyboard activity starts the event logger and calls your init endpoint.
+3. **Proof of work runs if enabled.** The server returns a signed SHA-256 challenge. A Web Worker solves it in the background, then the client sends the solution back to the same endpoint. Interaction logging continues during the calculation.
+4. **The server issues a token.** The response contains an HMAC-signed token and a random field name. The placeholder becomes the interactive checkbox, in the same space.
+5. **Checking the box captures the log.** The client freezes the recorded interactions and writes them to a hidden field immediately, ready for a regular submission or AJAX serialization.
+6. **PHP validates the submission.** The server checks the token signature and expiry, parses the log and compares its behavioral score with `score_threshold` (`0.5` by default). Your application receives the result before processing the form.
+
+### What the scorer looks at
+
+The check event selects the primary interaction profile:
+
+- **Mouse:** trajectory shape, click offset, speed variation, small angle changes, direction reversals and slowing near the checkbox. The scorer also examines speed autocorrelation, grouped pointer events and the difference between screen and client coordinates.
+- **Keyboard:** Tab and Shift+Tab navigation, the delay between focus and activation, key press durations, overlapping key presses and variation in the intervals between events.
+- **Touch:** movement and tap offset, plus pressure, contact radius and tap duration when the device provides them. Weights are redistributed when some touch signals are unavailable.
+
+Some rules set the score to zero immediately: an interaction under 100 ms, a mouse click without recorded movement, or a click or tap reported exactly at the checkbox's center. A zero score on the primary profile ends scoring. Otherwise, when enough data exists for a secondary mouse or keyboard profile, the higher score is kept.
+
+Set `debug` to `true` to inspect the selected profile and signal details through `$result->getDebug()` while testing an integration. Token validation and scoring run locally; no external captcha API participates in the decision.
+
 ## Proof of work and configuration
 
 To enable proof of work, set `pow` to `true` in the configuration used by your endpoint. The first init request receives a signed SHA-256 challenge. The client solves it, then sends the solution to obtain a token. The bundled client handles these requests.
@@ -141,9 +166,7 @@ The WordPress plugin enables proof of work and anti-replay by default. These are
 
 ## Widget and styles
 
-The widget first appears as a non-interactive placeholder. Mouse, touch, focus or keyboard activity starts initialization. Once the token is available, the checkbox becomes interactive. The client captures the interaction log when the visitor checks it.
-
-The scorer has mouse, keyboard and touch profiles. It uses signals such as trajectory changes, speed variation, key timing and available touch characteristics.
+The widget includes the checkbox, loading and checked states, a Gaitcha badge and the hidden verification fields. It fits its container up to 260 px wide; in narrow spaces, the badge switches to a compact version through a CSS container query.
 
 Choose the appearance independently of the scoring:
 
@@ -171,6 +194,8 @@ const instance = Gaitcha.init(form, '/captcha/init', {
     style: 'minimal',
 });
 ```
+
+Use the `container` option to place the widget in a specific element, for example `container: document.getElementById('captcha-slot')`.
 
 `instance.reset()` unchecks the widget, clears the log and requests a fresh token. Use it after a rejected AJAX submission so the visitor can try again. `Gaitcha.reset(form)` also resets an initialized form. `instance.destroy()` removes the instance's widget and listeners.
 
