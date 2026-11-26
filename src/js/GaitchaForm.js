@@ -39,6 +39,9 @@ function initGaitchaForm(form, endpoint, options) {
     let detectorCleanup = null;
     let serializerCleanup = null;
 
+    /** @type {boolean} True une fois le placeholder upgradé en widget actif. */
+    let activated = false;
+
     // Placeholder visible dès le chargement : annonce le captcha et
     // réserve l'espace (zéro layout shift à l'activation).
     injector.injectPlaceholder(label);
@@ -59,6 +62,7 @@ function initGaitchaForm(form, endpoint, options) {
             .then(function onFetchSuccess(data) {
                 // Activer le widget (upgrade du placeholder en place).
                 injector.inject(data.field_name, data.token, data.token_field_name, label);
+                activated = true;
 
                 // Enregistrer le check via le callback du widget.
                 // Passer le widget visible (pas le checkbox caché 0×0px)
@@ -105,8 +109,17 @@ function initGaitchaForm(form, endpoint, options) {
      * Décoche le widget, vide le log comportemental, et demande
      * un nouveau token au serveur. Appelé après un rejet serveur
      * pour permettre à l'utilisateur de réessayer.
+     *
+     * Sans effet tant que le widget n'est pas activé : il n'y a encore
+     * rien à décocher, et un token demandé ici ne serait injecté nulle
+     * part (certains plugins de formulaires déclenchent leur événement
+     * de rendu dès le premier affichage).
      */
     function reset() {
+        if (!activated) {
+            return;
+        }
+
         injector.reset();
         logger.reset();
 
