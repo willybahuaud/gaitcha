@@ -56,6 +56,9 @@ function createAjaxFetcher(endpoint, powSolver) {
     /** @type {Function|null} Callback à appeler quand les données changent. */
     let onRefreshCallback = null;
 
+    /** @type {Promise<object>|null} Demande de token en cours, partagée entre les appelants. */
+    let pendingFetch = null;
+
     /**
      * Envoie une requête init à l'endpoint.
      *
@@ -128,12 +131,27 @@ function createAjaxFetcher(endpoint, powSolver) {
     }
 
     /**
+     * Oublie la demande en cours une fois qu'elle a abouti ou échoué.
+     */
+    function clearPendingFetch() {
+        pendingFetch = null;
+    }
+
+    /**
      * Effectue le fetch initial vers l'endpoint (PoW comprise si exigée).
+     *
+     * Une seule demande à la fois : activation, reset et auto-refresh qui
+     * se chevauchent partagent la même réponse (un seul challenge, une
+     * seule PoW, un seul token).
      *
      * @return {Promise<{field_name: string, token: string, ttl: number, token_field_name: string}>}
      */
     function fetchInit() {
-        return fetchWithPow(0).then(function handleData(data) {
+        if (pendingFetch) {
+            return pendingFetch;
+        }
+
+        pendingFetch = fetchWithPow(0).then(function handleData(data) {
             if (!isValidResponse(data)) {
                 throw new Error('Gaitcha: invalid endpoint response.');
             }
@@ -148,6 +166,12 @@ function createAjaxFetcher(endpoint, powSolver) {
 
             return data;
         });
+
+        // Branché avant de rendre la promesse : les appelants voient
+        // toujours pendingFetch déjà libéré dans leurs propres callbacks.
+        pendingFetch.then(clearPendingFetch, clearPendingFetch);
+
+        return pendingFetch;
     }
 
     /**
