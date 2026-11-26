@@ -20,6 +20,9 @@ Le core est framework-agnostic. L'intégration WordPress et les adaptateurs (CF7
 # Tests PHP
 composer test
 
+# Tests JS (runner natif de Node, sans dépendance)
+npm test
+
 # Build JS (esbuild → dist/gaitcha.min.js)
 npm run build
 
@@ -54,11 +57,11 @@ vendor/bin/phpunit --filter testHumanMouseInteractionScoresHigh
 ### JS Core — `src/js/` (bundle → `dist/gaitcha.min.js`)
 
 - **gaitcha.js** — entry point, auto-init `form[data-gaitcha]`, expose `Gaitcha.init()`
-- **GaitchaForm** — orchestre tout pour un formulaire (une instance par form)
+- **GaitchaForm** — orchestre tout pour un formulaire (une instance par form). `reset()` est sans effet tant que le widget n'est pas activé
 - **InteractionDetector** — premier signal (mousemove, touchstart, focus, keydown)
 - **EventLogger** — buffer circulaire 30 moves, throttle 50ms, dwell time keydown/keyup, coalesced events count, screenDx/screenDy, freeze au check
-- **PoWSolver** — résout les challenges PoW : SHA-256 inline dans un Web Worker créé via Blob (fonctions auto-contenues sérialisées par toString()), fallback main thread par tranches si CSP bloque les workers
-- **AjaxFetcher** — fetch token en deux phases (résout le pow_challenge si renvoyé, max 3 tentatives) + auto-refresh à 75% du TTL (re-résout une PoW à chaque refresh)
+- **PoWSolver** — résout les challenges PoW (chaque appel à `solve()` a son propre worker, les appels simultanés sont indépendants) : SHA-256 inline dans un Web Worker créé via Blob (fonctions auto-contenues sérialisées par toString()), fallback main thread par tranches si CSP bloque les workers
+- **AjaxFetcher** — fetch token en deux phases (résout le pow_challenge si renvoyé, max 3 tentatives) + auto-refresh à 75% du TTL (re-résout une PoW à chaque refresh). Une seule demande à la fois : les appels qui se chevauchent partagent la même promesse
 - **DOMInjector** — placeholder pending au chargement, puis upgrade en place : checkbox visible + label + hidden fields (_ct, _log) dans le widget. Themes light/dark/auto x styles default/minimal via CSS custom properties
 - **LogSerializer** — sérialise le payload au submit
 
@@ -70,6 +73,10 @@ vendor/bin/phpunit --filter testHumanMouseInteractionScoresHigh
 ### Tests — `tests/php/`
 
 PHPUnit 9. Couvre Config, TokenGenerator, TokenValidator, BehavioralLogParser, BehavioralScorer, ValidationOrchestrator, FileTokenStore.
+
+### Tests JS — `tests/js/`
+
+`node --test` (runner natif). Couvre PoWSolver (résolutions simultanées, faux Worker) et AjaxFetcher (partage de la demande en cours, faux fetch).
 
 ## Scoring comportemental
 
