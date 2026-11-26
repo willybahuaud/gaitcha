@@ -197,7 +197,7 @@ const instance = Gaitcha.init(form, '/captcha/init', {
 
 Use the `container` option to place the widget in a specific element, for example `container: document.getElementById('captcha-slot')`.
 
-`instance.reset()` unchecks the widget, clears the log and requests a fresh token. Use it after a rejected AJAX submission so the visitor can try again. `Gaitcha.reset(form)` also resets an initialized form. `instance.destroy()` removes the instance's widget and listeners.
+`instance.reset()` unchecks the widget, clears the log and requests a fresh token. Use it after a rejected AJAX submission so the visitor can try again. `Gaitcha.reset(form)` also resets an initialized form. Both do nothing until the widget has been activated by a first interaction, so they are safe to call from a form plugin's render event. `instance.destroy()` removes the instance's widget and listeners.
 
 ## Data and troubleshooting
 

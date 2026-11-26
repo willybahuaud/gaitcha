@@ -191,25 +191,8 @@ function isValidChallenge(challenge) {
  * @return {object} Solveur avec solve(challenge) → Promise<string> et destroy().
  */
 function createPoWSolver() {
-    /** @type {Worker|null} */
-    var activeWorker = null;
-
-    /** @type {string|null} */
-    var blobUrl = null;
-
-    /**
-     * Termine le worker actif et libère l'URL du Blob.
-     */
-    function cleanupWorker() {
-        if (activeWorker) {
-            activeWorker.terminate();
-            activeWorker = null;
-        }
-        if (blobUrl) {
-            URL.revokeObjectURL(blobUrl);
-            blobUrl = null;
-        }
-    }
+    /** @type {Array<function(): void>} Libérations des résolutions en cours (une par appel à solve()). */
+    var pendingReleases = [];
 
     /**
      * Résout le challenge dans un Web Worker.
@@ -219,25 +202,53 @@ function createPoWSolver() {
      */
     function solveWithWorker(challenge) {
         return new Promise(function runWorkerSolve(resolve, reject) {
+            // Worker, URL du Blob et délai sont propres à cet appel : deux
+            // résolutions simultanées ne doivent pas se couper l'une l'autre.
+            var worker = null;
+            var blobUrl = null;
+            var timeoutTimer = null;
+
+            /**
+             * Termine le worker de cet appel et libère son URL de Blob.
+             */
+            function release() {
+                clearTimeout(timeoutTimer);
+
+                if (worker) {
+                    worker.terminate();
+                    worker = null;
+                }
+                if (blobUrl) {
+                    URL.revokeObjectURL(blobUrl);
+                    blobUrl = null;
+                }
+
+                var index = pendingReleases.indexOf(release);
+                if (index !== -1) {
+                    pendingReleases.splice(index, 1);
+                }
+            }
+
             try {
                 var source = '(' + powWorkerMain.toString() + ')(' + createPoWEngine.toString() + ');';
                 blobUrl = URL.createObjectURL(new Blob([source], { type: 'application/javascript' }));
-                activeWorker = new Worker(blobUrl);
+                worker = new Worker(blobUrl);
             } catch (creationError) {
-                cleanupWorker();
+                release();
                 reject(new Error(WORKER_FAILURE_MARKER));
                 return;
             }
 
-            var timeoutTimer = setTimeout(function handleSolveTimeout() {
-                cleanupWorker();
+            pendingReleases.push(release);
+
+            timeoutTimer = setTimeout(function handleSolveTimeout() {
+                release();
                 reject(new Error('Gaitcha: proof-of-work timed out.'));
             }, SOLVE_TIMEOUT_MS);
 
-            activeWorker.onmessage = function handleWorkerResult(event) {
-                clearTimeout(timeoutTimer);
+            worker.onmessage = function handleWorkerResult(event) {
                 var data = event.data || {};
-                cleanupWorker();
+                release();
 
                 if (typeof data.solution === 'string') {
                     resolve(data.solution);
@@ -246,13 +257,12 @@ function createPoWSolver() {
                 }
             };
 
-            activeWorker.onerror = function handleWorkerError() {
-                clearTimeout(timeoutTimer);
-                cleanupWorker();
+            worker.onerror = function handleWorkerError() {
+                release();
                 reject(new Error(WORKER_FAILURE_MARKER));
             };
 
-            activeWorker.postMessage({ nonce: challenge.nonce, difficulty: challenge.difficulty });
+            worker.postMessage({ nonce: challenge.nonce, difficulty: challenge.difficulty });
         });
     }
 
@@ -320,10 +330,12 @@ function createPoWSolver() {
     }
 
     /**
-     * Annule toute résolution en cours et libère les ressources.
+     * Annule toutes les résolutions en cours et libère les ressources.
      */
     function destroy() {
-        cleanupWorker();
+        pendingReleases.slice().forEach(function releasePending(release) {
+            release();
+        });
     }
 
     return {

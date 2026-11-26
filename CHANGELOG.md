@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.1] — 2026-11-26
+
+### Fixed
+- PoW solver: two overlapping `solve()` calls on the same solver no longer cut each other off. Each call now owns its worker, Blob URL and timeout; previously the first worker to answer terminated the other one, leaving its promise pending until the 30s timeout (widget stuck in `pending` with "initialization failed" when the lost call was the activation) (#2)
+- `destroy()` on the solver now terminates every pending resolution, not only the most recent one
+- `reset()` is a no-op until the widget has been activated: it no longer requests a token (challenge + proof-of-work) that could not be injected anywhere, nor starts the auto-refresh loop on a widget nobody interacted with (willybahuaud/gaitcha-for-wp#6)
+
+### Changed
+- Overlapping token requests on the same form (activation, `reset()`, auto-refresh) now share a single in-flight request: one challenge, one proof-of-work, one token
+
+### Added
+- JS unit tests for the PoW solver and the Ajax fetcher (`npm test`, Node built-in test runner, no new dependency)
+
 ## [0.8.0] — 2026-06-10
 
 ### Added

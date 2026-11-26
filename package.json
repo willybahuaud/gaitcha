@@ -1,11 +1,13 @@
 {
     "name": "gaitcha",
-    "version": "0.8.0",
+    "version": "0.8.1",
     "private": true,
+    "type": "module",
     "description": "Frictionless, self-hosted CAPTCHA combining behavioral analysis, random field names, and HMAC tokens.",
     "scripts": {
         "build": "node esbuild.config.mjs",
         "dev": "node esbuild.config.mjs --watch",
+        "test": "node --test \"tests/js/*.test.mjs\"",
         "serve": "php -S localhost:8080 -t demo demo/server.php"
     },
     "devDependencies": {
